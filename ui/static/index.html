@@ -7,39 +7,160 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="layout" id="layout">
-    <header>
-      <h1>Book Compiler</h1>
-      <select id="book-select"></select>
-      <div class="spacer"></div>
-      <button id="toggle-side" type="button" class="active">侧栏</button>
+  <!-- 书架管理台 -->
+  <div id="library-view" class="view">
+    <header class="lib-header">
+      <div class="lib-brand">
+        <h1>Book Compiler</h1>
+        <span class="lib-sub">书架</span>
+      </div>
+      <button type="button" id="btn-import" class="btn-icon btn-icon-primary" title="导入新书" aria-label="导入新书"></button>
     </header>
-    <div class="workspace" id="workspace">
-      <nav id="nav"></nav>
-      <div class="resize-handle" id="handle-nav" title="拖动调整导航宽度"></div>
-      <main id="main">
-        <article class="article" id="content">
-          <p class="loading">加载中…</p>
-        </article>
-      </main>
-      <div class="resize-handle" id="handle-side" title="拖动调整侧栏宽度"></div>
-      <aside class="side-panel" id="side-panel">
-        <div class="side-section source-section" id="source-section">
-          <div class="side-header" id="source-header">原文</div>
-          <div class="side-body" id="source-body"></div>
+    <main id="shelf" class="shelf">
+      <p class="loading">加载书架…</p>
+    </main>
+  </div>
+
+  <!-- 阅读器（点开书后） -->
+  <div id="reader-view" class="view hidden">
+    <div class="layout" id="layout">
+      <header class="reader-header">
+        <button type="button" id="btn-back" class="btn-icon" title="返回书架" aria-label="返回书架"></button>
+        <h1 id="reader-title">—</h1>
+        <div class="reader-controls" id="reader-controls">
+          <button type="button" id="btn-font-dec" class="btn-icon" title="减小字号" aria-label="减小字号"></button>
+          <button type="button" id="btn-font-inc" class="btn-icon" title="增大字号" aria-label="增大字号"></button>
+          <button type="button" id="btn-theme" class="btn-icon" title="切换阅读主题" aria-label="切换阅读主题"></button>
         </div>
-        <div class="resize-handle-h" id="handle-source-chat" title="拖动调整原文/对话高度"></div>
-        <div class="side-section chat-section" id="chat-section">
-          <div class="side-header">与 AI 对话</div>
-          <div class="chat-messages" id="chat-messages"></div>
-          <form class="chat-form" id="chat-form">
-            <textarea id="chat-input" rows="2" placeholder="基于当前书籍提问…"></textarea>
-            <button type="submit" id="chat-send">发送</button>
-          </form>
-        </div>
-      </aside>
+        <div class="spacer"></div>
+        <button id="toggle-nav" type="button" class="btn-icon active" title="目录导航" aria-label="目录导航"></button>
+        <button id="toggle-side" type="button" class="btn-icon active" title="侧栏" aria-label="侧栏"></button>
+      </header>
+      <div class="workspace" id="workspace">
+        <nav id="nav"></nav>
+        <div class="resize-handle" id="handle-nav" title="拖动调整导航宽度"></div>
+        <main id="main" class="source-main">
+          <div class="main-header source-header-bar">
+            <span id="source-header">原文</span>
+          </div>
+          <div class="main-body" id="source-body">
+            <p class="loading">加载中…</p>
+          </div>
+        </main>
+        <div class="resize-handle" id="handle-side" title="拖动调整侧栏宽度"></div>
+        <aside class="side-panel" id="side-panel">
+          <div class="side-section summary-section" id="summary-section">
+            <div class="side-header summary-header-bar" id="summary-header-bar">
+              <span id="summary-header">Summary</span>
+              <div class="summary-header-actions">
+                <button type="button" id="btn-summary-fullscreen" class="btn-icon" title="Summary + 对话专注模式" aria-label="Summary + 对话专注模式"></button>
+                <button type="button" id="btn-preview-inline" class="btn-icon btn-icon-accent hidden" title="生成全书概览" aria-label="生成全书概览"></button>
+                <button type="button" id="btn-deep-prompt" class="btn-icon hidden" title="编辑 Summary Prompt" aria-label="编辑 Summary Prompt"></button>
+                <button type="button" id="btn-deep" class="btn-icon btn-icon-accent hidden" title="生成深度 Summary" aria-label="生成深度 Summary"></button>
+              </div>
+            </div>
+            <div class="side-body summary-body" id="summary-body">
+              <p class="loading">加载中…</p>
+            </div>
+          </div>
+          <div class="resize-handle hidden" id="handle-overview-chat" title="拖动调整概览 / 对话宽度"></div>
+          <div class="resize-handle-h" id="handle-summary-chat" title="拖动调整 Summary / 对话高度"></div>
+          <div class="side-section chat-section" id="chat-section">
+            <div class="chat-messages" id="chat-messages"></div>
+            <form class="chat-form" id="chat-form">
+              <button type="button" id="btn-chat-cross" class="btn-icon btn-chat-cross hidden" title="跨章检索" aria-label="跨章检索" aria-pressed="false"></button>
+              <textarea id="chat-input" rows="2" placeholder="基于当前章节提问…"></textarea>
+              <button type="submit" id="chat-send" class="btn-icon btn-icon-accent" title="发送" aria-label="发送"></button>
+            </form>
+          </div>
+        </aside>
+      </div>
     </div>
   </div>
-  <script src="/app.js"></script>
+
+  <!-- 导入对话框 -->
+  <dialog id="import-dialog" class="import-dialog">
+    <form id="import-form" method="dialog">
+      <h2>导入新书</h2>
+      <p class="import-hint">上传源书（txt · md · docx · epub · pdf 文字层），自动标准化为纯文本后分章。扫描版 PDF 需 OCR（P3）。</p>
+      <label class="field">
+        <span>书名</span>
+        <input type="text" id="import-title" required placeholder="例如：精益创业" />
+      </label>
+      <label class="field">
+        <span>Slug（可选）</span>
+        <input type="text" id="import-slug" placeholder="留空则自动生成" pattern="[\w\u4e00-\u9fff-]+" />
+      </label>
+      <label class="field">
+        <span>类型</span>
+        <select id="import-type">
+          <option value="M">M · 方法论（概念、表格）</option>
+          <option value="N">N · 叙事（论点、案例）</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>源文件</span>
+        <input type="file" id="import-file" accept=".txt,.md,.docx,.epub,.pdf,text/plain" required />
+      </label>
+      <label class="field checkbox">
+        <input type="checkbox" id="import-split" checked />
+        <span>自动分章（智能识别 章/回/篇 标题）</span>
+      </label>
+      <div id="import-detect" class="import-detect hidden"></div>
+      <p id="import-error" class="import-error hidden"></p>
+      <div class="import-actions">
+        <button type="button" id="import-cancel" class="btn-ghost">取消</button>
+        <button type="submit" id="import-submit" class="btn-primary">导入</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="deep-prompt-dialog" class="prompt-dialog">
+    <form id="deep-prompt-form" method="dialog">
+      <div class="prompt-dialog-header" id="deep-prompt-drag-handle" title="拖动窗口">
+        <h2>深度 Summary Prompt</h2>
+        <button type="button" id="deep-prompt-delete-mode" class="btn-icon btn-icon-sm prompt-dialog-header-btn hidden" title="删除自定义风格" aria-label="删除自定义风格"></button>
+      </div>
+      <div class="prompt-dialog-body">
+      <div class="prompt-presets" id="deep-prompt-presets" aria-label="风格预设"></div>
+      <p class="prompt-dialog-hint" id="deep-prompt-meta">加载中…</p>
+      <label class="field">
+        <span>System Prompt（生成本章 Summary 时使用）</span>
+        <textarea id="deep-prompt-text" rows="18" spellcheck="false"></textarea>
+      </label>
+      <p id="deep-prompt-error" class="import-error hidden"></p>
+      <div class="import-actions">
+        <button type="button" id="deep-prompt-cancel" class="btn-ghost">取消</button>
+        <button type="button" id="deep-prompt-save-as-preset" class="btn-ghost hidden" title="保存新风格" aria-label="保存新风格">保存新风格</button>
+        <button type="button" id="deep-prompt-save" class="btn-primary">保存</button>
+      </div>
+      </div>
+    </form>
+    <div class="prompt-dialog-resize" id="deep-prompt-resize" title="拖动调整大小" aria-hidden="true"></div>
+  </dialog>
+
+  <dialog id="preset-save-dialog" class="preset-save-dialog">
+    <form method="dialog">
+      <h3>保存新风格</h3>
+      <p class="preset-save-hint">保存后可在所有书中复用，点图标即可切换</p>
+      <label class="field">
+        <span>风格名称</span>
+        <input type="text" id="preset-save-name" maxlength="40" placeholder="例如：小白解释风格" autocomplete="off" />
+      </label>
+      <div class="field">
+        <span>选择图标</span>
+        <div class="emoji-picker-selected" id="preset-save-icon-preview" aria-live="polite">✨</div>
+        <div class="emoji-picker-grid" id="preset-save-emoji-grid" role="listbox" aria-label="选择 emoji"></div>
+      </div>
+      <div class="import-actions">
+        <button type="button" id="preset-save-cancel" class="btn-ghost">取消</button>
+        <button type="button" id="preset-save-confirm" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/vendor/pdf.min.js"></script>
+  <script src="/vendor/mermaid.min.js"></script>
+  <script src="/app.js?v=69"></script>
 </body>
 </html>

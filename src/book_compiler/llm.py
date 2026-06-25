@@ -35,16 +35,31 @@ def _normalize_base(url: str) -> str:
     return base
 
 
-def _client():
+def _http_client():
+    import ssl
+
     import httpx
+
+    # trust_env=False: bypass broken system HTTP_PROXY (causes Connection refused)
+    try:
+        import certifi
+
+        ca = certifi.where()
+        if Path(ca).is_file():
+            return httpx.Client(verify=ca, trust_env=False, timeout=120.0)
+    except (ImportError, OSError, FileNotFoundError):
+        pass
+    return httpx.Client(verify=ssl.create_default_context(), trust_env=False, timeout=120.0)
+
+
+def _client():
     from openai import OpenAI
 
     kwargs: dict = {"api_key": _api_key()}
     base = _base_url()
     if base:
         kwargs["base_url"] = _normalize_base(base)
-    # trust_env=False: bypass broken system HTTP_PROXY (causes Connection refused)
-    kwargs["http_client"] = httpx.Client(trust_env=False, timeout=120.0)
+    kwargs["http_client"] = _http_client()
     return OpenAI(**kwargs)
 
 
@@ -58,9 +73,31 @@ def complete(system: str, user: str, model: str | None = None) -> str:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        temperature=0.3,
+        temperature=0.6,
     )
     return resp.choices[0].message.content or ""
+
+
+def complete_stream(system: str, user: str, model: str | None = None):
+    """Yield LLM output text chunks as they arrive."""
+    if not has_llm():
+        yield _heuristic(user)
+        return
+    stream = _client().chat.completions.create(
+        model=model or _model(),
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.6,
+        stream=True,
+    )
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content or ""
+        if delta:
+            yield delta
 
 
 def _heuristic(prompt: str) -> str:

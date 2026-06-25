@@ -7,7 +7,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .paths import BOOK_COMPILER_ROOT, book_root, insight_dir, state_dir
+from .paths import BOOK_COMPILER_ROOT, book_root, insight_dir, meta_path, summary_dir, state_dir
 
 
 def _now() -> str:
@@ -17,16 +17,17 @@ def _now() -> str:
 def migrate_pm_book() -> Path:
     root = book_root("pm-book-sujie")
     legacy = root / "概览"
+    summ = summary_dir(root)
     insight = insight_dir(root)
-    chapters = insight / "chapters"
+    chapters = summ / "chapters"
     concepts = insight / "concepts"
-    for d in (insight, chapters, concepts, state_dir(root), root / "skill"):
+    for d in (summ, chapters, insight, concepts, state_dir(root), root / "skill"):
         d.mkdir(parents=True, exist_ok=True)
 
-    # overview ← 全文深度总结
+    # overview ← 全文深度总结 → summary/
     src_overview = legacy / "全文深度总结.md"
     if src_overview.exists() and src_overview.stat().st_size > 0:
-        dst = insight / "overview.md"
+        dst = summ / "overview.md"
         body = src_overview.read_text(encoding="utf-8")
         dst.write_text(
             f"---\nschema_version: \"0.1\"\nbook_slug: pm-book-sujie\n"
@@ -34,24 +35,17 @@ def migrate_pm_book() -> Path:
             encoding="utf-8",
         )
 
-    # synthesis ← 全书融会贯通报告
+    # synthesis ← legacy 融会贯通（历史数据；新书应在 Q&A 后生成）
     src_syn = legacy / "全书融会贯通报告.md"
     if src_syn.exists() and src_syn.stat().st_size > 0:
         body = src_syn.read_text(encoding="utf-8")
         (insight / "synthesis.md").write_text(
             f"---\nschema_version: \"0.1\"\nbook_slug: pm-book-sujie\n"
-            f"kind: synthesis\nmigrated_at: {_now()}\n---\n\n{body}",
+            f"kind: insight-synthesis\nmigrated_at: {_now()}\nlegacy: true\n---\n\n{body}",
             encoding="utf-8",
         )
 
-    # qa
-    src_qa = legacy / "Q&A.md"
-    if src_qa.exists() and src_qa.stat().st_size > 0:
-        body = src_qa.read_text(encoding="utf-8")
-        (insight / "qa.md").write_text(
-            f"---\nschema_version: \"0.1\"\nbook_slug: pm-book-sujie\n---\n\n{body}",
-            encoding="utf-8",
-        )
+    # Q&A：不迁移旧 Q&A.md — 阅读时由 chatbot 自动写入 insight/qa.md
 
     # concepts ← 方法论抽取
     legacy_concepts = legacy / "方法论抽取"
@@ -81,7 +75,7 @@ def migrate_pm_book() -> Path:
             (chapters / dst_name).write_text(
                 f"---\nschema_version: \"0.1\"\nbook_slug: pm-book-sujie\n"
                 f"chapter_id: {dst_name.replace('.md', '')}\ntemplate: M\n"
-                f"migrated_at: {_now()}\n---\n\n{body}",
+                f"kind: deep-summary\nmigrated_at: {_now()}\n---\n\n{body}",
                 encoding="utf-8",
             )
 

@@ -1,2 +1,5 @@
 # Book Compiler — LLM (UI uses stdlib only)
 openai>=1.0.0
+
+# Optional: PDF text-layer import (scan/OCR is P3)
+pypdf>=4.0.0

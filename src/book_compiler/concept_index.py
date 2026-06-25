@@ -1,16 +1,14 @@
-"""Build concept-index.json from concepts/ and chapter files."""
+"""Build concept-index.json from summary/concepts/*.json and chapter files."""
 
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
-CONCEPT_HEADING = re.compile(
-    r"^#{1,3}\s*概念\d*[：:]\s*(.+)$|^###\s*概念\d*[：:]\s*(.+)$",
-    re.MULTILINE,
-)
-TABLE_CONCEPT = re.compile(r"^\|\s*\*\*(.+?)\*\*\s*\|", re.MULTILINE)
+from .paths import insight_dir, meta_path, summary_dir
+import re
+
+from .summary_parse import load_chapter_concepts, parse_chapter_summary
 
 
 def slugify(name: str) -> str:
@@ -19,35 +17,36 @@ def slugify(name: str) -> str:
     return s.lower() or "concept"
 
 
-def extract_concepts_from_md(text: str, chapter: str, source: str) -> dict:
-    found: dict[str, dict] = {}
-    for m in CONCEPT_HEADING.finditer(text):
-        name = (m.group(1) or m.group(2)).strip()
-        if len(name) < 2 or len(name) > 40:
-            continue
-        found.setdefault(
-            name,
-            {
+def build_concept_index(book_root: Path) -> Path:
+    insight = insight_dir(book_root)
+    summ = summary_dir(book_root)
+    mp = meta_path(book_root)
+    slug = "unknown"
+    if mp.exists():
+        slug = json.loads(mp.read_text(encoding="utf-8")).get("slug", slug)
+
+    concepts: dict[str, dict] = {}
+
+    def upsert(name: str, chapter: str | None, ref: str, anchor: str = "") -> None:
+        if not name or len(name) < 2:
+            return
+        if name in concepts:
+            if ref not in concepts[name]["insight_refs"]:
+                concepts[name]["insight_refs"].append(ref)
+            if not concepts[name]["chapter"]:
+                concepts[name]["chapter"] = chapter
+            if anchor and anchor not in concepts[name]["anchors"]:
+                concepts[name]["anchors"].append(anchor)
+        else:
+            concepts[name] = {
                 "id": slugify(name),
                 "aliases": [name],
                 "type": "framework",
                 "chapter": chapter,
-                "anchors": [],
-                "insight_refs": [],
+                "anchors": [anchor] if anchor else [],
+                "insight_refs": [ref],
                 "related": [],
-            },
-        )
-    return found
-
-
-def build_concept_index(book_root: Path) -> Path:
-    insight = book_root / "insight"
-    meta_path = insight / "book-meta.json"
-    slug = "unknown"
-    if meta_path.exists():
-        slug = json.loads(meta_path.read_text(encoding="utf-8")).get("slug", slug)
-
-    concepts: dict[str, dict] = {}
+            }
 
     # from insight/concepts/*.md filenames
     concepts_dir = insight / "concepts"
@@ -56,35 +55,41 @@ def build_concept_index(book_root: Path) -> Path:
             if f.stat().st_size == 0:
                 continue
             name = f.stem
-            concepts[name] = {
-                "id": slugify(name),
-                "aliases": [name],
-                "type": "framework",
-                "chapter": None,
-                "anchors": [],
-                "insight_refs": [f"insight/concepts/{f.name}"],
-                "related": [],
-            }
+            upsert(name, None, f"insight/concepts/{f.name}")
 
-    # from chapters
-    chapters_dir = insight / "chapters"
-    if chapters_dir.is_dir():
+    # primary: summary/concepts/*.json (written by page index build)
+    json_dir = summ / "concepts"
+    if json_dir.is_dir():
+        for f in sorted(json_dir.glob("ch*.json")):
+            parsed = load_chapter_concepts(book_root, f.stem)
+            if not parsed:
+                continue
+            ref = f"summary/concepts/{f.name}"
+            for c in parsed.concepts:
+                upsert(c.name, parsed.chapter_id, ref, c.anchor)
+
+    # fallback: parse chapter markdown directly
+    for chapters_dir, prefix in (
+        (summ / "chapters", "summary/chapters"),
+        (insight / "chapters", "insight/chapters"),
+    ):
+        if not chapters_dir.is_dir():
+            continue
         for f in sorted(chapters_dir.glob("ch*.md")):
             if f.stat().st_size == 0:
                 continue
             ch_id = f.stem
-            text = f.read_text(encoding="utf-8")
-            for name, entry in extract_concepts_from_md(text, ch_id, "").items():
-                if name in concepts:
-                    concepts[name]["insight_refs"].append(f"insight/chapters/{f.name}")
-                    if not concepts[name]["chapter"]:
-                        concepts[name]["chapter"] = ch_id
-                else:
-                    entry["insight_refs"] = [f"insight/chapters/{f.name}"]
-                    concepts[name] = entry
+            if json_dir.is_dir() and (json_dir / f"{ch_id}.json").is_file():
+                continue
+            parsed = parse_chapter_summary(
+                f.read_text(encoding="utf-8"), ch_id, source_file=f"{prefix}/{f.name}"
+            )
+            ref = f"{prefix}/{f.name}"
+            for c in parsed.concepts:
+                upsert(c.name, ch_id, ref, c.anchor)
 
     index = {
-        "schema_version": "0.1",
+        "schema_version": "0.2",
         "book_slug": slug,
         "concepts": concepts,
     }

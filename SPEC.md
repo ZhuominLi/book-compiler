@@ -1,8 +1,9 @@
-# Book Compiler · SPEC（Schema 定稿 v0.1）
+# Book Compiler · SPEC（Schema 定稿 v0.2）
 
 > **产品名**：Book Compiler（暂定）  
-> **一句话**：一本书进去 → **Insight 包**（个人知识库）+ **Skill 包**（AI 可调用）  
-> **Golden Sample 来源**：人人都是产品经理 NOTE（M 型）；启示录 ch01（N 型，待做）
+> **一句话**：一本书进去 → **深度 Summary**（读前材料）→ 阅读 Q&A → **Insight 包** + **Skill 包**  
+> **Golden Sample 来源**：人人都是产品经理 NOTE（M 型）；启示录 ch01（N 型，待做）  
+> **最后更新**：2026-06-06
 
 ---
 
@@ -12,28 +13,31 @@
 
 ```
 Readings/{分类}/
-├── {原书}.txt                          # 源文件（输入）
+├── {原书}.{txt|md|docx|epub|pdf}       # 源文件（任意支持格式）
 └── {书名}NOTE/                         # book-root
-    ├── _extract/                       # [输入] 分章原文
+    ├── {stem}.txt                      # ingest 标准化全文（canonical）
+    ├── _extract/                       # [输入] 分章原文（行锚点 L）
     │   └── ch01.txt … chNN.txt
     ├── _state/                         # [运行时] pipeline 状态（可删可重建）
     │   └── pipeline.json
-    ├── insight/                        # [交付物 1] 个人知识库
-    │   ├── book-meta.json
+    ├── summary/                        # [Pipeline] 深度 Summary（Q&A 之前）
     │   ├── overview.md
+    │   ├── chapters/ch01.md … chNN.md
+    │   └── page-index.json
+    ├── insight/                        # [交付物 1] 个人 Insight（Q&A 之后）
+    │   ├── book-meta.json
+    │   ├── qa.md                       # UI chatbot 自动追加，不预生成
     │   ├── synthesis.md
-    │   ├── qa.md
     │   ├── concept-index.json
-    │   ├── chapters/
-    │   │   └── ch01.md … chNN.md
-    │   └── concepts/                   # [可选] 从 index 抽出的单概念深页
-    │       └── Y模型.md
-    └── skill/                          # [交付物 2] 本地 skill 草稿（compile 输出）
+    │   └── concepts/                   # [可选]
+    └── skill/                          # [交付物 2] compile 输出
         ├── SKILL.md
         ├── reference.md
         ├── examples.md
         └── manifest.json
 ```
+
+**向后兼容**：旧书 `insight/chapters/`、`insight/overview.md` 仍可读；新书统一写 `summary/`。
 
 **安装位置**（compile 后复制）：
 
@@ -58,7 +62,82 @@ Readings/{分类}/
 
 ---
 
-## 3. `book-meta.json`
+## 3. Input Pipeline（ingest）
+
+**用途**：任意源格式 → **BookDraft**（canonical 纯文本）→ 现有 split / preview / deep 不变。
+
+### 3.1 流程
+
+```
+POST /api/books (multipart)
+  → detect_format(filename)
+  → adapter(bytes) → BookDraft
+  → init_book(source_text=draft.text) → {stem}.txt
+  → optional split_book() → _extract/ch*.txt
+```
+
+### 3.2 `BookDraft`（内存，不落盘 schema）
+
+| 字段 | 说明 |
+|------|------|
+| `text` | 标准化全文，`\n` 换行，供分章与 L 锚点 |
+| `source_format` | `txt` / `md` / `docx` / `epub` / `pdf_text` / `pdf_scan` |
+| `original_filename` | 用户上传名 |
+| `warnings` | 如「Word 表格未保留」 |
+| `needs_ocr` | 扫描 PDF 为 true，导入拒绝并提示 P3 |
+
+### 3.3 Adapter 注册表
+
+| 扩展名 | adapter | 依赖 |
+|--------|---------|------|
+| `.txt` | `adapters/txt.py` | stdlib |
+| `.md` | `adapters/md.py` | stdlib |
+| `.docx` | `adapters/docx.py` | stdlib (zip+xml) |
+| `.epub` | `adapters/epub.py` | stdlib (zip+spine) |
+| `.pdf` | `adapters/pdf.py` | `pypdf`（文字层）；扫描版 `needs_ocr` |
+
+代码路径：`src/book_compiler/ingest/`
+
+### 3.4 `book-meta.json` → `ingest` 字段
+
+```json
+"ingest": {
+  "source_format": "epub",
+  "original_filename": "启示录.epub",
+  "ingested_at": "2026-06-06T12:00:00Z",
+  "warnings": ["EPUB 已按 spine 顺序转为纯文本"]
+}
+```
+
+### 3.5 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/books` | multipart: `title`, `file`, `auto_split`, … |
+| POST | `/api/split/detect` | JSON `source_text` 或 multipart `file` |
+| POST | `/api/ingest/detect` | 仅预览 ingest + split，不建书 |
+| GET | `/api/health` | `ingest_formats` 列表 |
+
+---
+
+## 4. 阅读呈现
+
+**原则**：存储用 Markdown，呈现用 HTML + CSS；原文侧栏用纯文本 + 行号。
+
+| 区域 | 存储 | UI 渲染 |
+|------|------|---------|
+| Summary / Insight 正文 | `summary/*.md`, `insight/*.md` | `renderMd()` → `.article.md-body.reader` |
+| OCR 原文 | `_extract/ch*.txt` | 等宽 + 行号，highlight 锚点范围 |
+| Chatbot | localStorage + `qa.md` | assistant 气泡 MD→HTML |
+
+**阅读器偏好**（`localStorage: book-compiler-reader`）：
+
+- `--reader-size`：14–22px
+- `data-reader-theme`：`paper` | `night`
+
+---
+
+## 5. `book-meta.json`
 
 **用途**：全书元数据 + 类型识别 + 章节索引。Preview 完成后写入/更新。
 
@@ -135,7 +214,7 @@ Readings/{分类}/
 
 ---
 
-## 4. `concept-index.json`
+## 6. `concept-index.json`
 
 **用途**：概念 → 章节锚点，供 Q&A 跳转、Skill reference、UI 内链。
 
@@ -181,7 +260,7 @@ Readings/{分类}/
 
 ---
 
-## 5. `_state/pipeline.json`
+## 7. `_state/pipeline.json`
 
 **用途**：运行时 checkpoint，支持断点续传。
 
@@ -204,9 +283,9 @@ Readings/{分类}/
 
 ---
 
-## 6. Insight 文件 Schema
+## 8. 文件 Schema
 
-### 6.1 `insight/overview.md`（预览模式产出）
+### 8.1 `summary/overview.md`（Preview 产出）
 
 **时机**：书进入 → 分章完成后  
 **作用**：全局 summary，决定要不要深度读
@@ -242,7 +321,7 @@ generated_at: 2026-06-06T09:00:00Z
 {基于 preview 的判断：适合深读 / 选读哪些章}
 ```
 
-### 6.2 `insight/chapters/chNN.md` — 模板 M（方法论型）
+### 8.2 `summary/chapters/chNN.md` — 模板 M（方法论型）
 
 **Golden Sample**：`人人都是产品经理NOTE/概览/第4章.md`
 
@@ -256,7 +335,7 @@ generated_at: 2026-06-06T09:00:00Z
 4. `## 与全书关系`
 5. `## 本章 Q&A`（用户问答，答案含锚点）
 
-### 6.3 `insight/chapters/chNN.md` — 模板 N（叙事型）
+### 8.3 `summary/chapters/chNN.md` — 模板 N（叙事型）
 
 **Golden Sample**：`book-compiler/golden/inspired-ch01.md`（待创建）
 
@@ -271,7 +350,7 @@ generated_at: 2026-06-06T09:00:00Z
 5. `## 术语表`（若有）
 6. `## 本章 Q&A`
 
-### 6.4 `insight/qa.md`
+### 8.4 `insight/qa.md`
 
 **格式**：全书 Q&A 日志，预览 + 深度模式追加。
 
@@ -307,7 +386,7 @@ book_slug: pm-book-sujie
 - 每条 Q&A 必须有 `溯源`（至少 1 个 anchor）
 - 概念名用 `[[概念名]]`，对应 `concept-index.json`
 
-### 6.5 `insight/synthesis.md`（深度全书完成后）
+### 8.5 `insight/synthesis.md`（需 qa.md 非空）
 
 **Golden Sample**：`人人都是产品经理NOTE/概览/全书融会贯通报告.md`
 
@@ -334,11 +413,11 @@ sources:
 
 ---
 
-## 7. Skill 包 Schema
+## 9. Skill 包 Schema
 
 Skill 从 Insight **二次编译**，不手写。
 
-### 7.1 `skill/manifest.json`
+### 9.1 `skill/manifest.json`
 
 ```json
 {
@@ -356,7 +435,7 @@ Skill 从 Insight **二次编译**，不手写。
 }
 ```
 
-### 7.2 `skill/SKILL.md`
+### 9.2 `skill/SKILL.md`
 
 **约束**：< 500 行；第三人称 description；含触发词。
 
@@ -392,35 +471,43 @@ description: >-
 - 示例问答：examples.md
 ```
 
-### 7.3 `skill/reference.md`
+### 9.3 `skill/reference.md`
 
 从 `concept-index` + `synthesis` 压缩的速查表，可较长（progressive disclosure）。
 
-### 7.4 `skill/examples.md`
+### 9.4 `skill/examples.md`
 
 从 `qa.md` 选 3～5 条高质量 Q&A，格式与 qa.md 一致但精简。
 
 ---
 
-## 8. Pipeline 流程
+## 10. Pipeline 流程
 
-### 8.1 Preview 模式
+### 10.1 Ingest（导入）
 
 ```
-输入: 原书 txt
-  → split_chapters()     → _extract/ch*.txt
+源文件 → ingest_bytes() → BookDraft
+  → init_book() 写入 canonical txt + book-meta.ingest
+  → split_book() → _extract/ch*.txt（可选）
+```
+
+### 10.2 Preview 模式
+
+```
+输入: canonical txt + _extract/
   → detect_book_type()   → book-meta.json
-  → gen_overview()       → insight/overview.md
+  → gen_overview()       → summary/overview.md
   → init_concept_index() → concept-index.json (preview 级概念)
-  → qa_loop(optional)    → append insight/qa.md
-输出: Insight 部分（无 synthesis、无 skill）
+输出: Summary（无 qa、synthesis、skill）
 ```
 
-### 8.2 Deep 模式（Human-in-the-loop）
+> **Q&A 不预生成** — 仅 UI chatbot 阅读时追加 `insight/qa.md`。
+
+### 10.3 Deep 模式（Human-in-the-loop）
 
 ```
 for chapter in chapters:
-  → gen_chapter_insight(M|N)  → insight/chapters/chNN.md  [status: draft]
+  → gen_chapter_insight(M|N)  → summary/chapters/chNN.md  [status: draft]
   → update_concept_index()
   → ⏸ HITL 闸门：人工审阅/编辑 chapters/chNN.md
   → qa_gate()                 → 用户 Q&A，append qa.md（可选）
@@ -445,7 +532,7 @@ post (全部 approved 后):
 
 章节状态：`pending` → `draft`（待审）→ `approved`（已通过）
 
-### 8.3 Q&A Grounding 规则
+### 10.4 Q&A Grounding 规则
 
 1. 检索顺序：`concept-index` → 对应 `chapters/` → `_extract/` 原文
 2. 答案必须含 ≥1 个 `溯源` anchor
@@ -454,7 +541,7 @@ post (全部 approved 后):
 
 ---
 
-## 9. Insight → Skill 编译规则
+## 11. Insight → Skill 编译规则
 
 | Insight 来源 | Skill 目标 | 规则 |
 |-------------|-----------|------|
@@ -469,7 +556,7 @@ post (全部 approved 后):
 
 ---
 
-## 10. Golden Sample 清单
+## 12. Golden Sample 清单
 
 | 类型 | 文件 | 状态 |
 |------|------|------|
@@ -485,34 +572,39 @@ post (全部 approved 后):
 
 ---
 
-## 11. MVP 实现顺序
+## 13. MVP 实现顺序
 
-| 阶段 | 交付 | 验收 |
-|------|------|------|
-| **0** | 本 SPEC + templates | 你能看懂每个文件放什么 |
-| **1** | 迁移人人产品经理 → 新目录结构 | insight/ 与现有概览等价 |
-| **2** | Preview pipeline（overview + qa grounding） | 对 overview 提问能跳转 |
-| **3** | Deep 单章（M 模板） | ch04 自动 ≈ golden sample |
-| **4** | 启示录分章 + N 模板 golden | inspired-ch01.md 完成 |
-| **5** | synthesis + compile_skill | skill 在新对话可触发 |
+| 阶段 | 交付 | 验收 | 状态 |
+|------|------|------|------|
+| **0** | 本 SPEC + templates | 你能看懂每个文件放什么 | ✅ |
+| **1** | 迁移人人产品经理 → 新目录结构 | insight/ 与现有概览等价 | ✅ |
+| **2** | Preview pipeline | overview 可生成 | ✅ |
+| **3** | Deep 单章（M 模板） | ch04 自动 ≈ golden sample | ⚠️ |
+| **4** | 启示录分章 + N 模板 | inspired 39 章 | ✅ |
+| **5** | synthesis + compile_skill | skill 可触发 | ✅ |
+| **6** | Input ingest 多格式 | txt/md/docx/epub/pdf 导入 | ✅ |
+| **7** | 阅读呈现 MD+CSS | 主题/字号/锚点 | ✅ |
+| **8** | PDF OCR 异步 | 扫描古籍可导入 | ⏳ P3 |
 
 ---
 
-## 12. 附录：文件清单速查
+## 14. 附录：文件清单速查
 
 | 路径 | 阶段 | 交付物 |
 |------|------|--------|
-| `_extract/ch*.txt` | 输入 | 原文 |
-| `insight/book-meta.json` | Preview | 元数据 |
-| `insight/overview.md` | Preview | Insight |
-| `insight/chapters/ch*.md` | Deep | Insight |
-| `insight/qa.md` | Preview+Deep | Insight |
-| `insight/synthesis.md` | Deep 完成 | Insight |
-| `insight/concept-index.json` | Preview+Deep | Insight |
+| `{stem}.txt` | Ingest | canonical 全文 |
+| `_extract/ch*.txt` | Split | 分章原文（L 锚点） |
+| `insight/book-meta.json` | Init | 元数据 + ingest |
+| `summary/overview.md` | Preview | 深度 Summary |
+| `summary/chapters/ch*.md` | Deep | 深度 Summary |
+| `insight/qa.md` | 阅读 UI | Insight（对话） |
+| `insight/synthesis.md` | Post-Q&A | Insight（融会贯通） |
+| `summary/page-index.json` | Preview+Deep | 检索索引 |
 | `skill/*` | Compile | Skill |
 | `_state/pipeline.json` | 运行时 | 内部 |
 
-**两个交付物边界**：
+**三层边界**：
 
-- **Insight** = `insight/` 整个目录（给人读、给 PKM、给 search）
-- **Skill** = `skill/` → 安装到 `~/.cursor/skills/`（给 Agent 路由调用）
+- **Summary** = `summary/`（Pipeline 读厚，Q&A 之前）
+- **Insight** = `insight/qa.md` + `synthesis.md`（你的理解，Q&A 之后）
+- **Skill** = `skill/` → `~/.cursor/skills/`（给 Agent）
