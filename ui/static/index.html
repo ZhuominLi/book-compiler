@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Book Compiler</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="layout" id="layout">
+    <header>
+      <h1>Book Compiler</h1>
+      <select id="book-select"></select>
+      <div class="spacer"></div>
+      <button id="toggle-side" type="button" class="active">侧栏</button>
+    </header>
+    <div class="workspace" id="workspace">
+      <nav id="nav"></nav>
+      <div class="resize-handle" id="handle-nav" title="拖动调整导航宽度"></div>
+      <main id="main">
+        <article class="article" id="content">
+          <p class="loading">加载中…</p>
+        </article>
+      </main>
+      <div class="resize-handle" id="handle-side" title="拖动调整侧栏宽度"></div>
+      <aside class="side-panel" id="side-panel">
+        <div class="side-section source-section" id="source-section">
+          <div class="side-header" id="source-header">原文</div>
+          <div class="side-body" id="source-body"></div>
+        </div>
+        <div class="resize-handle-h" id="handle-source-chat" title="拖动调整原文/对话高度"></div>
+        <div class="side-section chat-section" id="chat-section">
+          <div class="side-header">与 AI 对话</div>
+          <div class="chat-messages" id="chat-messages"></div>
+          <form class="chat-form" id="chat-form">
+            <textarea id="chat-input" rows="2" placeholder="基于当前书籍提问…"></textarea>
+            <button type="submit" id="chat-send">发送</button>
+          </form>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

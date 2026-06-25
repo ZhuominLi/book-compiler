@@ -1,0 +1,2 @@
+# Book Compiler — LLM (UI uses stdlib only)
+openai>=1.0.0
