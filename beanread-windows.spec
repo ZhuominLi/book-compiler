@@ -1,7 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 """BeanRead Windows bundle — build with scripts/build-windows.ps1 or GitHub Actions."""
-import os
-
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
@@ -31,8 +29,6 @@ EXCLUDES = [
     "pytest",
     "setuptools",
 ]
-
-icon = "ui/static/icon.png" if os.path.isfile("ui/static/icon.png") else None
 
 a = Analysis(
     ["launcher.py"],
@@ -72,7 +68,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=icon,
 )
 coll = COLLECT(
     exe,
