@@ -34,7 +34,9 @@ $AppDir = Join-Path $Root "dist\BeanRead"
 $Exe = Join-Path $AppDir "BeanRead.exe"
 if (-not (Test-Path $Exe)) { Fail "missing $Exe" }
 
-$Version = & $Py -c "from book_compiler import __version__; print(__version__)"
+$env:PYTHONPATH = Join-Path $Root "src"
+$Version = (& $Py -c "from book_compiler import __version__; print(__version__)").Trim()
+if (-not $Version) { $Version = "0.0.0" }
 $ZipName = "BeanRead-$Version-Windows.zip"
 $ZipPath = Join-Path $Root "dist\$ZipName"
 
