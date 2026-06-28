@@ -1,0 +1,246 @@
+{
+  "sheet": {
+    "width": 1024,
+    "height": 819,
+    "path": "_source/ui-kit-full.png"
+  },
+  "tokens": {
+    "colors": {
+      "bean_green": "#ABC27A",
+      "bean_yellow": "#F6D786",
+      "bean_cream": "#FFE9C5",
+      "bean_sand": "#EBD7B4",
+      "bean_brown": "#8B6E4E"
+    },
+    "slogan_zh": "让阅读成为一件轻松的事",
+    "name_zh": "懒豆阅读",
+    "name_en": "beanread"
+  },
+  "sprites": {
+    "icon-home": {
+      "box": [
+        54,
+        248,
+        43,
+        55
+      ],
+      "display": 40
+    },
+    "icon-bookshelf": {
+      "box": [
+        132,
+        248,
+        47,
+        56
+      ],
+      "display": 40
+    },
+    "icon-discover": {
+      "box": [
+        179,
+        248,
+        72,
+        56
+      ],
+      "display": 40
+    },
+    "icon-member": {
+      "box": [
+        251,
+        248,
+        72,
+        56
+      ],
+      "display": 40
+    },
+    "icon-notes": {
+      "box": [
+        323,
+        248,
+        72,
+        55
+      ],
+      "display": 40
+    },
+    "icon-search": {
+      "box": [
+        51,
+        329,
+        48,
+        61
+      ],
+      "display": 40
+    },
+    "icon-bookmark": {
+      "box": [
+        137,
+        329,
+        39,
+        61
+      ],
+      "display": 40
+    },
+    "icon-history": {
+      "box": [
+        214,
+        328,
+        37,
+        62
+      ],
+      "display": 40
+    },
+    "icon-download": {
+      "box": [
+        251,
+        329,
+        72,
+        61
+      ],
+      "display": 40
+    },
+    "icon-settings": {
+      "box": [
+        323,
+        330,
+        72,
+        60
+      ],
+      "display": 40
+    },
+    "mascot-status-reading": {
+      "box": [
+        451,
+        68,
+        108,
+        94
+      ],
+      "display": 100
+    },
+    "mascot-status-rest": {
+      "box": [
+        559,
+        68,
+        146,
+        94
+      ],
+      "display": 100
+    },
+    "mascot-status-no-books": {
+      "box": [
+        730,
+        70,
+        133,
+        92
+      ],
+      "display": 100
+    },
+    "mascot-status-empty": {
+      "box": [
+        863,
+        70,
+        103,
+        92
+      ],
+      "display": 100
+    }
+  },
+  "sections": {
+    "reference/brand-block.png": {
+      "box": [
+        20,
+        42,
+        402,
+        220
+      ],
+      "trimmed_size": [
+        373,
+        178
+      ]
+    },
+    "reference/status-illustrations-row.png": {
+      "box": [
+        402,
+        65,
+        1018,
+        164
+      ],
+      "trimmed_size": [
+        521,
+        99
+      ]
+    },
+    "reference/onboarding-row.png": {
+      "box": [
+        402,
+        175,
+        1018,
+        332
+      ],
+      "trimmed_size": [
+        579,
+        157
+      ]
+    },
+    "reference/functional-icons-block.png": {
+      "box": [
+        20,
+        239,
+        402,
+        392
+      ],
+      "trimmed_size": [
+        354,
+        153
+      ]
+    },
+    "reference/buttons-block.png": {
+      "box": [
+        20,
+        453,
+        402,
+        518
+      ],
+      "trimmed_size": [
+        382,
+        65
+      ]
+    },
+    "reference/nav-and-deco-block.png": {
+      "box": [
+        20,
+        557,
+        402,
+        806
+      ],
+      "trimmed_size": [
+        382,
+        249
+      ]
+    },
+    "reference/components-block.png": {
+      "box": [
+        402,
+        332,
+        1018,
+        609
+      ],
+      "trimmed_size": [
+        616,
+        277
+      ]
+    },
+    "reference/progress-emojis-colors.png": {
+      "box": [
+        402,
+        617,
+        1018,
+        806
+      ],
+      "trimmed_size": [
+        577,
+        189
+      ]
+    }
+  },
+  "note": "Sprites are icon-only (labels excluded). ~40px source icons — OK for 24–32px UI. For retina toolbars export 512px assets from Figma into ui/element/export/."
+}

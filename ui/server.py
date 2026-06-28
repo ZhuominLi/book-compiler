@@ -12,8 +12,27 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+from book_compiler.paths import (  # noqa: E402
+    chapter_path,
+    frozen_bundle_root,
+    meta_path,
+    normalize_slug,
+    overview_path,
+    read_layer_file,
+    resolve_book_root,
+    resolve_static_dir,
+    resolve_element_dir,
+)
+
+if getattr(sys, "frozen", False):
+    root = frozen_bundle_root()
+    ROOT = root if root else Path(sys.executable).resolve().parent
+else:
+    ROOT = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(ROOT / "src"))
+
+STATIC = resolve_static_dir(Path(__file__))
+ELEMENT = resolve_element_dir(Path(__file__))
 
 from book_compiler.books import book_item, delete_book, discover_books  # noqa: E402
 from book_compiler.ingest import detect_format, ingest_bytes, ingest_text  # noqa: E402
@@ -21,6 +40,8 @@ from book_compiler.ingest.adapters.epub import extract_chapter_html, read_epub_a
 from book_compiler.ingest.registry import SUPPORTED_EXTENSIONS, SUPPORTED_LABEL  # noqa: E402
 from book_compiler.init_book import init_book  # noqa: E402
 from book_compiler.llm import complete, has_llm, load_env_file  # noqa: E402
+from book_compiler.llm_settings import public_status, save_settings  # noqa: E402
+from book_compiler.runtime_update import apply_runtime_update, check_for_update, runtime_status  # noqa: E402
 from book_compiler.text_clean import is_garbage_line, normalize_text  # noqa: E402
 from book_compiler.page_index import (  # noqa: E402
     build_chat_context,
@@ -35,7 +56,6 @@ from book_compiler.source_viewer import (  # noqa: E402
     load_meta,
     pdf_file_path,
 )
-from book_compiler.paths import chapter_path, meta_path, normalize_slug, overview_path, read_layer_file, resolve_book_root  # noqa: E402
 from book_compiler.deep_prompt import (  # noqa: E402
     bind_deep_prompt_preset,
     get_deep_prompt,
@@ -47,8 +67,8 @@ from book_compiler.prompt_presets import create_preset, delete_preset, list_pres
 from book_compiler.pipeline import iter_deep_chapter_stream, run_deep_chapter, run_preview  # noqa: E402
 from book_compiler.qa_log import append_qa_turn, ensure_qa_file  # noqa: E402
 from book_compiler.split_chapters import detect_split, split_book  # noqa: E402
+from book_compiler.brand import APP_TITLE  # noqa: E402
 
-STATIC = Path(__file__).resolve().parent / "static"
 PORT = 8765
 HOST = "0.0.0.0"
 
@@ -81,7 +101,7 @@ def _resolve_content(slug: str, file_path: str) -> tuple[str, Path]:
     return layer, fp
 
 
-CHAT_SYSTEM = """你是 Book Compiler 阅读助手。基于用户提供的材料回答问题。
+CHAT_SYSTEM = """你是懒豆阅读（BeanRead）阅读助手。基于用户提供的材料回答问题。
 
 材料可能包含（按实际提供的内容）：
 - **本章原文**：当前章 _extract 全文（带 L 行号），仅涵盖这一章
@@ -148,6 +168,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_deep_prompt_save(_slug(m.group(1)))
         if path == "/api/prompt-presets":
             return self._api_prompt_presets_create()
+        if path == "/api/settings/llm":
+            return self._api_llm_settings_save()
+        if path == "/api/update/check":
+            return self._api_update_check()
+        if path == "/api/update/apply":
+            return self._api_update_apply()
         return self._json({"error": "not found"}, 404)
 
     def do_PUT(self):
@@ -199,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
             if file_bytes is not None:
                 out["file_bytes"] = file_bytes
                 out["source_filename"] = getattr(file_item, "filename", None) or "source.txt"
-        for key in ("title", "slug", "book_type", "auto_split", "use_llm"):
+        for key in ("title", "tag", "auto_split", "use_llm"):
             if key not in form:
                 continue
             val = form.getvalue(key)
@@ -218,6 +244,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _text(self, text: str, content_type="text/plain; charset=utf-8", status=200):
         body = text.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _bytes(self, body: bytes, content_type: str = "application/octet-stream", status=200):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -313,7 +346,7 @@ class Handler(BaseHTTPRequestHandler):
 
             if not has_llm():
                 return self._json({
-                    "reply": "（未配置 LLM_API_KEY，请在 book-compiler/.env 配置后重启 UI。）",
+                    "reply": "（未配置 AI 接口，请点击书架右上角 ⚙ 设置 API Key。）",
                     "nodes": [],
                     "context": "",
                 })
@@ -411,7 +444,7 @@ class Handler(BaseHTTPRequestHandler):
     def _api_deep_chapter(self, slug: str, chapter_id: str):
         try:
             if not has_llm():
-                return self._json({"error": "未配置 LLM_API_KEY，请在 book-compiler/.env 配置后重启 UI"}, 503)
+                return self._json({"error": "未配置 AI 接口，请在设置中填写 API Key"}, 503)
             body = self._read_json_body()
             force = bool(body.get("force", False))
             stream = bool(body.get("stream", False))
@@ -439,7 +472,7 @@ class Handler(BaseHTTPRequestHandler):
     def _api_preview(self, slug: str):
         try:
             if not has_llm():
-                return self._json({"error": "未配置 LLM_API_KEY，请在 book-compiler/.env 配置后重启 UI"}, 503)
+                return self._json({"error": "未配置 AI 接口，请在设置中填写 API Key"}, 503)
             root = resolve_book_root(slug)
             meta = json.loads(meta_path(root).read_text(encoding="utf-8"))
             if not meta.get("chapters"):
@@ -540,8 +573,7 @@ class Handler(BaseHTTPRequestHandler):
                 file_bytes = form.get("file_bytes")
                 source_filename = (form.get("source_filename") or f"{title}.txt").strip()
                 upload_name = source_filename
-                slug = (form.get("slug") or "").strip() or None
-                book_type = form.get("book_type", "M")
+                tag = (form.get("tag") or "").strip() or None
                 auto_split = str(form.get("auto_split", "true")).lower() not in ("0", "false", "no")
                 if not file_bytes:
                     return self._json({"error": "请上传源文件"}, 400)
@@ -564,8 +596,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_json_body()
                 title = (body.get("title") or "").strip()
                 source_text = body.get("source_text")
-                slug = (body.get("slug") or "").strip() or None
-                book_type = body.get("book_type", "M")
+                tag = (body.get("tag") or "").strip() or None
                 auto_split = bool(body.get("auto_split"))
                 source_filename = (body.get("source_filename") or f"{title}.txt").strip()
                 original_bytes = None
@@ -585,8 +616,6 @@ class Handler(BaseHTTPRequestHandler):
             if not source_text or not str(source_text).strip():
                 return self._json({"error": f"请上传源文件（支持 {SUPPORTED_LABEL}）"}, 400)
 
-            if book_type not in ("M", "N"):
-                book_type = "M"
             if not source_filename.endswith(".txt"):
                 source_filename = Path(source_filename).stem + ".txt"
 
@@ -595,8 +624,7 @@ class Handler(BaseHTTPRequestHandler):
 
             root = init_book(
                 title=title,
-                slug=slug,
-                book_type=book_type,
+                tag=tag,
                 source_text=str(source_text),
                 source_filename=source_filename,
                 source_format=source_format,
@@ -640,6 +668,36 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._json({"error": str(e)}, 500)
 
+    def _api_update_check(self):
+        try:
+            return self._json(check_for_update(ROOT))
+        except Exception as e:
+            return self._json({"ok": False, "error": str(e), "update_available": False}, 500)
+
+    def _api_update_apply(self):
+        try:
+            body = self._read_json_body()
+            url = (body.get("url") or "").strip()
+            if not url:
+                return self._json({"error": "缺少 url"}, 400)
+            return self._json(apply_runtime_update(url, str(body.get("sha256") or "")))
+        except Exception as e:
+            return self._json({"error": str(e)}, 500)
+
+    def _api_llm_settings_save(self):
+        try:
+            body = self._read_json_body()
+            kwargs = {}
+            if "api_key" in body:
+                kwargs["api_key"] = body.get("api_key") or ""
+            if "base_url" in body:
+                kwargs["base_url"] = body.get("base_url") or ""
+            if "model" in body:
+                kwargs["model"] = body.get("model") or ""
+            return self._json(save_settings(**kwargs))
+        except Exception as e:
+            return self._json({"error": str(e)}, 500)
+
     def _api(self, path: str, qs: dict):
         try:
             if path == "/api/books":
@@ -648,9 +706,17 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/health":
                 return self._json({
                     "ok": True,
-                    "features": ["import", "ingest", "split", "chat", "reader", "deep-prompt", "prompt-presets"],
+                    "features": ["import", "ingest", "split", "chat", "reader", "deep-prompt", "prompt-presets", "settings", "update"],
                     "ingest_formats": list(SUPPORTED_EXTENSIONS),
+                    "llm": public_status(),
+                    "runtime": runtime_status(ROOT),
                 })
+
+            if path == "/api/update/status":
+                return self._json(runtime_status(ROOT))
+
+            if path == "/api/settings/llm":
+                return self._json(public_status())
 
             if path == "/api/prompt-presets":
                 return self._api_prompt_presets_list(qs)
@@ -802,6 +868,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 500)
 
     def _static(self, path: str):
+        if path.startswith("/element/"):
+            rel = path[len("/element/") :]
+            fp = (ELEMENT / rel).resolve()
+            root = ELEMENT.resolve()
+            if not str(fp).startswith(str(root)) or not fp.is_file():
+                return self._text("Not Found", status=404)
+            ctype = {
+                ".css": "text/css; charset=utf-8",
+                ".json": "application/json; charset=utf-8",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".webp": "image/webp",
+                ".svg": "image/svg+xml",
+            }.get(fp.suffix.lower(), "application/octet-stream")
+            if fp.suffix.lower() in (".css", ".json", ".svg"):
+                return self._text(fp.read_text(encoding="utf-8"), content_type=ctype)
+            return self._bytes(fp.read_bytes(), content_type=ctype)
+
         if path in ("/", ""):
             path = "/index.html"
         fp = (STATIC / path.lstrip("/")).resolve()
@@ -815,18 +900,26 @@ class Handler(BaseHTTPRequestHandler):
         self._text(fp.read_text(encoding="utf-8"), content_type=ctype)
 
 
+def create_httpd(host: str = HOST, port: int = PORT) -> ThreadingHTTPServer:
+    from book_compiler.paths import app_data_dir
+
+    load_env_file(app_data_dir() / ".env")
+    if not getattr(sys, "frozen", False):
+        load_env_file(ROOT / ".env")
+    return ThreadingHTTPServer((host, port), Handler)
+
+
 def main():
-    load_env_file(ROOT / ".env")
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Book Compiler UI → http://127.0.0.1:{PORT}")
+    httpd = create_httpd()
+    print(f"{APP_TITLE} → http://127.0.0.1:{PORT}")
     lan = _lan_ip()
     if lan:
         print(f"局域网访问 → http://{lan}:{PORT}")
     if has_llm():
         print("AI 对话：已启用")
     else:
-        print("AI 对话：未配置 LLM_API_KEY（仅显示提示）")
-    server.serve_forever()
+        print("AI 对话：未配置（请在设置 → AI 接口 中填写 API Key）")
+    httpd.serve_forever()
 
 
 if __name__ == "__main__":

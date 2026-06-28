@@ -1,0 +1,7 @@
+# Minimal runtime for BeanRead desktop (PyInstaller bundle)
+openai>=1.0.0
+pypdf>=4.0.0
+pywebview>=5.0
+
+# Build-only (install before scripts/build-macos.sh)
+# pyinstaller>=6.0

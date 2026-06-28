@@ -3,11 +3,113 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 from urllib.parse import unquote
 
 BOOK_COMPILER_ROOT = Path(__file__).resolve().parents[2]
-READINGS_PM = BOOK_COMPILER_ROOT.parent  # Readings/产品经理
+READINGS_PM = BOOK_COMPILER_ROOT.parent  # dev-only: legacy CLI paths
+
+
+def _is_frozen() -> bool:
+    return getattr(sys, "frozen", False)
+
+
+def frozen_bundle_bases() -> list[Path]:
+    """PyInstaller search paths (macOS .app Resources, Windows _internal, one-file _MEIPASS)."""
+    if not _is_frozen():
+        return []
+    exe = Path(sys.executable).resolve()
+    candidates: list[Path] = []
+    if meipass := getattr(sys, "_MEIPASS", None):
+        candidates.append(Path(meipass))
+    if sys.platform == "darwin":
+        candidates.append(exe.parent.parent / "Resources")
+    internal = exe.parent / "_internal"
+    if internal.is_dir():
+        candidates.append(internal)
+    candidates.append(exe.parent)
+    seen: set[str] = set()
+    bases: list[Path] = []
+    for base in candidates:
+        key = str(base)
+        if key in seen:
+            continue
+        seen.add(key)
+        bases.append(base)
+    return bases
+
+
+def frozen_bundle_root() -> Path | None:
+    if not _is_frozen():
+        return None
+    for base in frozen_bundle_bases():
+        if (base / "runtime-version.json").is_file() or (base / "ui" / "static" / "index.html").is_file():
+            return base
+    bases = frozen_bundle_bases()
+    return bases[0] if bases else None
+
+
+def app_data_dir() -> Path:
+    """Registry & user settings (books.json, prompt presets)."""
+    if p := os.environ.get("BEANREAD_DATA_DIR"):
+        d = Path(p)
+    elif _is_frozen():
+        if sys.platform == "win32":
+            d = Path.home() / "AppData" / "Local" / "BeanRead"
+        elif sys.platform == "darwin":
+            d = Path.home() / "Library/Application Support/BeanRead"
+        else:
+            d = Path.home() / ".local/share/BeanRead"
+    else:
+        d = BOOK_COMPILER_ROOT / "_state"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def library_dir() -> Path:
+    """Imported book NOTE directories (user uploads only)."""
+    if p := os.environ.get("BEANREAD_LIBRARY"):
+        d = Path(p)
+    elif _is_frozen():
+        d = app_data_dir() / "books"
+    else:
+        d = BOOK_COMPILER_ROOT / "library"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def resolve_static_dir(server_file: Path) -> Path:
+    """Locate ui/static — runtime overlay first, then bundle / dev tree."""
+    from .runtime_update import runtime_static_dir
+
+    rt_static = runtime_static_dir()
+    if rt_static:
+        return rt_static
+    if getattr(sys, "frozen", False):
+        for base in frozen_bundle_bases():
+            if not base.is_dir():
+                continue
+            for rel in ("ui/static", "static"):
+                cand = base / rel
+                if (cand / "index.html").is_file():
+                    return cand
+    return server_file.resolve().parent / "static"
+
+
+def resolve_element_dir(server_file: Path) -> Path:
+    """Locate ui/element — bundle / dev tree."""
+    if getattr(sys, "frozen", False):
+        for base in frozen_bundle_bases():
+            cand = base / "ui" / "element"
+            if (cand / "manifest.json").is_file():
+                return cand
+    return server_file.resolve().parent / "element"
+
+
+def bundle_resources_dir() -> Path | None:
+    return frozen_bundle_root()
 
 
 def normalize_slug(slug: str) -> str:
@@ -21,26 +123,13 @@ def normalize_slug(slug: str) -> str:
     return s
 
 
-def book_root(slug: str) -> Path:
-    mapping = {
-        "pm-book-sujie": READINGS_PM / "人人都是产品经理NOTE",
-        "inspired-cagan": READINGS_PM / "启示录NOTE",
-    }
-    if slug not in mapping:
-        raise KeyError(f"Unknown book slug: {slug}. Known: {list(mapping)}")
-    return mapping[slug]
-
-
 def books_registry_path() -> Path:
-    return BOOK_COMPILER_ROOT / "_state" / "books.json"
+    return app_data_dir() / "books.json"
 
 
 def register_book(slug: str, note_dir: Path) -> None:
-    """Runtime register (used by init). Persists in _state/books.json."""
-    import json
-
+    """Persist imported book path in books.json."""
     state = books_registry_path()
-    state.parent.mkdir(parents=True, exist_ok=True)
     data = json.loads(state.read_text(encoding="utf-8")) if state.is_file() else {}
     data[slug] = str(note_dir)
     state.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -48,8 +137,6 @@ def register_book(slug: str, note_dir: Path) -> None:
 
 def unregister_book(slug: str) -> bool:
     """Remove slug from books.json. Returns True if it was registered."""
-    import json
-
     state = books_registry_path()
     if not state.is_file():
         return False
@@ -62,8 +149,6 @@ def unregister_book(slug: str) -> bool:
 
 
 def _registered_books() -> dict[str, Path]:
-    import json
-
     state = books_registry_path()
     if not state.is_file():
         return {}
@@ -72,20 +157,11 @@ def _registered_books() -> dict[str, Path]:
 
 def resolve_book_root(slug: str) -> Path:
     slug = normalize_slug(slug)
-    try:
-        return book_root(slug)
-    except KeyError:
-        pass
     reg = _registered_books()
     if slug in reg:
-        return reg[slug]
-    for note_dir in sorted(READINGS_PM.glob("*NOTE")):
-        mp = note_dir / "insight" / "book-meta.json"
-        if not mp.is_file():
-            continue
-        meta = json.loads(mp.read_text(encoding="utf-8"))
-        if meta.get("slug") == slug:
-            return note_dir
+        root = reg[slug]
+        if meta_path(root).is_file():
+            return root
     raise KeyError(f"Unknown book slug: {slug}")
 
 
@@ -166,7 +242,6 @@ def read_layer_file(root: Path, layer: str, rel: str) -> Path:
     if not str(fp).startswith(str(base.resolve())):
         raise ValueError("forbidden")
     if layer == "summary" and not fp.is_file():
-        # backward compat: old books kept chapters under insight/
         alt = (insight_dir(root) / rel).resolve()
         if str(alt).startswith(str(insight_dir(root).resolve())) and alt.is_file():
             return alt

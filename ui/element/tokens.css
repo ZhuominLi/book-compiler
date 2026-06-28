@@ -1,0 +1,18 @@
+/* BeanRead design tokens — from UI kit */
+:root {
+  --bean-green: #ABC27A;
+  --bean-yellow: #F6D786;
+  --bean-cream: #FFE9C5;
+  --bean-sand: #EBD7B4;
+  --bean-brown: #8B6E4E;
+  --bg: #FFE9C5;
+  --surface: #fff;
+  --accent: #ABC27A;
+  --accent-soft: color-mix(in srgb, #ABC27A 18%, #FFE9C5);
+  --text: #8B6E4E;
+  --muted: color-mix(in srgb, #8B6E4E 55%, #FFE9C5);
+  --border: color-mix(in srgb, #EBD7B4 80%, #fff);
+  --radius-card: 20px;
+  --radius-btn: 999px;
+  --shadow-clay: 0 8px 24px rgba(139, 110, 78, 0.12);
+}

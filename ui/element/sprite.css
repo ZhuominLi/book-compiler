@@ -1,0 +1,78 @@
+/* BeanRead UI kit sprites — one sheet, CSS background-position */
+.bean-sprite {
+  display: inline-block;
+  background-image: url('/element/_source/ui-kit-full.png');
+  background-repeat: no-repeat;
+  background-size: 1024px 819px;
+  vertical-align: middle;
+}
+.bean-sprite-icon-home {
+  width: 40px; height: 51px;
+  background-position: -50.2px -230.7px;
+  background-size: 952.6px 761.9px;
+}
+.bean-sprite-icon-bookshelf {
+  width: 40px; height: 48px;
+  background-position: -112.3px -211.1px;
+  background-size: 871.5px 697.0px;
+}
+.bean-sprite-icon-discover {
+  width: 40px; height: 31px;
+  background-position: -99.4px -137.8px;
+  background-size: 568.9px 455.0px;
+}
+.bean-sprite-icon-member {
+  width: 40px; height: 31px;
+  background-position: -139.4px -137.8px;
+  background-size: 568.9px 455.0px;
+}
+.bean-sprite-icon-notes {
+  width: 40px; height: 31px;
+  background-position: -179.4px -137.8px;
+  background-size: 568.9px 455.0px;
+}
+.bean-sprite-icon-search {
+  width: 40px; height: 51px;
+  background-position: -42.5px -274.2px;
+  background-size: 853.3px 682.5px;
+}
+.bean-sprite-icon-bookmark {
+  width: 40px; height: 63px;
+  background-position: -140.5px -337.4px;
+  background-size: 1050.3px 840.0px;
+}
+.bean-sprite-icon-history {
+  width: 40px; height: 67px;
+  background-position: -231.4px -354.6px;
+  background-size: 1107.0px 885.4px;
+}
+.bean-sprite-icon-download {
+  width: 40px; height: 34px;
+  background-position: -139.4px -182.8px;
+  background-size: 568.9px 455.0px;
+}
+.bean-sprite-icon-settings {
+  width: 40px; height: 33px;
+  background-position: -179.4px -183.3px;
+  background-size: 568.9px 455.0px;
+}
+.bean-sprite-mascot-status-reading {
+  width: 100px; height: 87px;
+  background-position: -417.6px -63.0px;
+  background-size: 948.1px 758.3px;
+}
+.bean-sprite-mascot-status-rest {
+  width: 100px; height: 64px;
+  background-position: -382.9px -46.6px;
+  background-size: 701.4px 561.0px;
+}
+.bean-sprite-mascot-status-no-books {
+  width: 100px; height: 69px;
+  background-position: -548.9px -52.6px;
+  background-size: 769.9px 615.8px;
+}
+.bean-sprite-mascot-status-empty {
+  width: 100px; height: 89px;
+  background-position: -837.9px -68.0px;
+  background-size: 994.2px 795.1px;
+}
