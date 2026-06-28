@@ -1,0 +1,7 @@
+{
+  "version": "0.1.0",
+  "url": "https://github.com/ZhuominLi/book-compiler/releases/download/v0.1.0/runtime-0.1.0.zip",
+  "sha256": "9c8605c1bf778e167d6d004022c30b48d9086f528826550bcd1a568d1b042533",
+  "shell_min": "0.1.0",
+  "notes": "初始 runtime 0.1.0"
+}
