@@ -18,7 +18,7 @@ from book_compiler.compile_skill import compile_skill  # noqa: E402
 from book_compiler.concept_index import build_concept_index  # noqa: E402
 from book_compiler.migrate import migrate_pm_book  # noqa: E402
 from book_compiler.init_book import init_book  # noqa: E402
-from book_compiler.paths import book_root, resolve_book_root  # noqa: E402
+from book_compiler.paths import resolve_book_root  # noqa: E402
 from book_compiler.hitl import approve_chapter, hitl_status, reset_chapter  # noqa: E402
 from book_compiler.pipeline import (  # noqa: E402
     run_deep_all,
@@ -27,9 +27,6 @@ from book_compiler.pipeline import (  # noqa: E402
     run_synthesis,
 )
 from book_compiler.split_chapters import split_inspired  # noqa: E402
-
-BOOKS = ["pm-book-sujie", "inspired-cagan"]
-
 
 def cmd_init(args: argparse.Namespace) -> None:
     src = Path(args.txt).expanduser().resolve() if args.txt else None
@@ -157,7 +154,7 @@ def main() -> None:
     ai.set_defaults(func=cmd_all_inspired)
 
     def add_book(sp: argparse.ArgumentParser) -> None:
-        sp.add_argument("--book", default="pm-book-sujie", choices=BOOKS)
+        sp.add_argument("--book", required=True, help="book slug (from books.json / UI import)")
 
     sp = sub.add_parser("preview", help="Generate overview.md")
     add_book(sp)

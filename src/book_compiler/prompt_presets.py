@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .paths import BOOK_COMPILER_ROOT
+from .paths import app_data_dir
 from .prompts import SYSTEM_M, SYSTEM_N
 
 BUILTIN_M = "builtin-m"
@@ -37,9 +37,7 @@ def _now() -> str:
 
 
 def presets_path() -> Path:
-    d = BOOK_COMPILER_ROOT / "_state"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "prompt-presets.json"
+    return app_data_dir() / "prompt-presets.json"
 
 
 def _load_store() -> dict:

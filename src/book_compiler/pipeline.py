@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
 from .concept_index import build_concept_index
 from .page_index import build_page_index
-from .llm import complete, complete_stream, has_llm
+from .llm import MAX_OUTPUT_TOKENS, complete, complete_stream, estimate_tokens, has_llm
 from .paths import meta_path, qa_path, summary_dir, synthesis_path, chapter_write_path, chapter_path
 from .deep_prompt import resolve_deep_system_prompt
 from .prompts import PROMPT_REVISION, SYSTEM_OVERVIEW, SYSTEM_SYNTHESIS
@@ -166,13 +167,66 @@ def iter_deep_chapter_stream(
     )
 
     parts: list[str] = []
-    for delta in complete_stream(system, user):
-        parts.append(delta)
-        yield ("delta", {"text": delta})
+    first_token_at: float | None = None
+    started_at = time.monotonic()
+    api_tokens: int | None = None
+    finish_reason: str | None = None
+
+    for chunk in complete_stream(system, user):
+        if chunk.completion_tokens is not None or chunk.finish_reason:
+            api_tokens = chunk.completion_tokens if chunk.completion_tokens is not None else api_tokens
+            finish_reason = chunk.finish_reason or finish_reason
+            continue
+        if not chunk.text:
+            continue
+
+        if first_token_at is None:
+            first_token_at = time.monotonic()
+        parts.append(chunk.text)
+        body_so_far = "".join(parts)
+        tokens = api_tokens if api_tokens is not None else estimate_tokens(body_so_far)
+        elapsed = time.monotonic() - (first_token_at or started_at)
+        tps = round(tokens / elapsed, 1) if elapsed >= 0.05 else 0.0
+        yield (
+            "delta",
+            {
+                "text": chunk.text,
+                "tokens": tokens,
+                "tokens_exact": api_tokens is not None,
+                "tps": tps,
+                "max_tokens": MAX_OUTPUT_TOKENS,
+            },
+        )
 
     body = "".join(parts)
+    final_tokens = api_tokens if api_tokens is not None else estimate_tokens(body)
+    elapsed = time.monotonic() - (first_token_at or started_at)
+    final_tps = round(final_tokens / elapsed, 1) if elapsed >= 0.05 else 0.0
+    yield (
+        "stream_end",
+        {
+            "tokens": final_tokens,
+            "tokens_exact": api_tokens is not None,
+            "tps": final_tps,
+            "finish_reason": finish_reason,
+            "truncated": finish_reason == "length",
+            "max_tokens": MAX_OUTPUT_TOKENS,
+        },
+    )
+
     result = finalize_deep_chapter(root, meta, ch, front, body, hitl=hitl)
-    yield ("done", result)
+    yield (
+        "done",
+        {
+            **result,
+            "tokens": final_tokens,
+            "tokens_exact": api_tokens is not None,
+            "tps": final_tps,
+            "finish_reason": finish_reason,
+            "truncated": finish_reason == "length",
+            "max_tokens": MAX_OUTPUT_TOKENS,
+        },
+    )
 
 
 def run_deep_chapter(

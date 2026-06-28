@@ -7,7 +7,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .paths import BOOK_COMPILER_ROOT, book_root, insight_dir, meta_path, summary_dir, state_dir
+from .paths import BOOK_COMPILER_ROOT, READINGS_PM, insight_dir, meta_path, summary_dir, state_dir
 
 
 def _now() -> str:
@@ -15,7 +15,7 @@ def _now() -> str:
 
 
 def migrate_pm_book() -> Path:
-    root = book_root("pm-book-sujie")
+    root = READINGS_PM / "人人都是产品经理NOTE"
     legacy = root / "概览"
     summ = summary_dir(root)
     insight = insight_dir(root)

@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Book Compiler</title>
+  <title>懒豆阅读 · BeanRead</title>
+  <link rel="icon" href="/icon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/icon.png" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -11,11 +13,18 @@
   <div id="library-view" class="view">
     <header class="lib-header">
       <div class="lib-brand">
-        <h1>Book Compiler</h1>
-        <span class="lib-sub">书架</span>
+        <h1>懒豆阅读</h1>
+        <span class="lib-sub">BeanRead · 书架</span>
       </div>
-      <button type="button" id="btn-import" class="btn-icon btn-icon-primary" title="导入新书" aria-label="导入新书"></button>
+      <div class="lib-actions">
+        <button type="button" id="btn-settings" class="btn-icon" title="AI 接口设置" aria-label="AI 接口设置"></button>
+        <button type="button" id="btn-import" class="btn-icon btn-icon-primary" title="导入新书" aria-label="导入新书"></button>
+      </div>
     </header>
+    <div id="llm-banner" class="llm-banner hidden">
+      <span>请填入您自己的 API Key，以使用 AI 对话与 Summary</span>
+      <button type="button" id="llm-banner-settings" class="btn-ghost btn-sm">去设置</button>
+    </div>
     <main id="shelf" class="shelf">
       <p class="loading">加载书架…</p>
     </main>
@@ -52,6 +61,7 @@
           <div class="side-section summary-section" id="summary-section">
             <div class="side-header summary-header-bar" id="summary-header-bar">
               <span id="summary-header">Summary</span>
+              <span id="summary-stream-stats" class="summary-stream-stats hidden" aria-live="polite"></span>
               <div class="summary-header-actions">
                 <button type="button" id="btn-summary-fullscreen" class="btn-icon" title="Summary + 对话专注模式" aria-label="Summary + 对话专注模式"></button>
                 <button type="button" id="btn-preview-inline" class="btn-icon btn-icon-accent hidden" title="生成全书概览" aria-label="生成全书概览"></button>
@@ -88,15 +98,8 @@
         <input type="text" id="import-title" required placeholder="例如：精益创业" />
       </label>
       <label class="field">
-        <span>Slug（可选）</span>
-        <input type="text" id="import-slug" placeholder="留空则自动生成" pattern="[\w\u4e00-\u9fff-]+" />
-      </label>
-      <label class="field">
-        <span>类型</span>
-        <select id="import-type">
-          <option value="M">M · 方法论（概念、表格）</option>
-          <option value="N">N · 叙事（论点、案例）</option>
-        </select>
+        <span>标签（可选）</span>
+        <input type="text" id="import-tag" placeholder="例如：产品经理 · 相同标签归入同一书丛" maxlength="32" />
       </label>
       <label class="field">
         <span>源文件</span>
@@ -159,8 +162,56 @@
     </form>
   </dialog>
 
+  <dialog id="llm-startup-dialog" class="import-dialog llm-startup-dialog">
+    <div class="llm-startup-body">
+      <h2>请先配置 AI 接口</h2>
+      <p class="import-hint">AI 对话、章节 Summary、智能分章都需要 API Key。请填入你的 DeepSeek / OpenAI 兼容接口密钥，保存在本机。</p>
+      <div class="import-actions">
+        <button type="button" id="llm-startup-later" class="btn-ghost">稍后再说</button>
+        <button type="button" id="llm-startup-setup" class="btn-primary">立即配置</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="llm-settings-dialog" class="import-dialog settings-dialog">
+    <form id="llm-settings-form" method="dialog">
+      <h2>设置</h2>
+      <h3 class="settings-section-title">AI 接口</h3>
+      <p class="import-hint">配置 OpenAI 兼容接口（DeepSeek、OpenAI 等）。Key 保存在本机，不会上传。</p>
+      <p id="llm-settings-status" class="llm-settings-status">加载中…</p>
+      <label class="field">
+        <span>API Key</span>
+        <input type="password" id="llm-settings-key" autocomplete="off" placeholder="留空则保持不变" />
+      </label>
+      <label class="field">
+        <span>Base URL</span>
+        <input type="text" id="llm-settings-base" placeholder="https://api.deepseek.com" />
+      </label>
+      <label class="field">
+        <span>Model</span>
+        <input type="text" id="llm-settings-model" placeholder="deepseek-chat" />
+      </label>
+      <p id="llm-settings-error" class="import-error hidden"></p>
+      <div class="import-actions">
+        <button type="button" id="llm-settings-clear-key" class="btn-ghost">清除 Key</button>
+        <button type="button" id="llm-settings-cancel" class="btn-ghost">取消</button>
+        <button type="submit" id="llm-settings-save" class="btn-primary">保存</button>
+      </div>
+    </form>
+    <div class="settings-update-block">
+      <h3 class="settings-section-title">应用更新</h3>
+      <p id="update-version-line" class="llm-settings-status">加载版本…</p>
+      <p id="update-notes" class="import-hint hidden"></p>
+      <p id="update-error" class="import-error hidden"></p>
+      <div class="import-actions">
+        <button type="button" id="btn-check-update" class="btn-ghost">检查更新</button>
+        <button type="button" id="btn-apply-update" class="btn-primary hidden">下载并安装</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="/vendor/pdf.min.js"></script>
   <script src="/vendor/mermaid.min.js"></script>
-  <script src="/app.js?v=69"></script>
+  <script src="/app.js?v=85"></script>
 </body>
 </html>

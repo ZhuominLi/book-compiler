@@ -4,28 +4,46 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
+
+from .llm_settings import active_config, is_configured
+
+MAX_OUTPUT_TOKENS = 8192
+
+
+@dataclass
+class StreamChunk:
+    text: str = ""
+    completion_tokens: int | None = None
+    finish_reason: str | None = None
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough live estimate for mixed Chinese/English (not billing-accurate)."""
+    if not text:
+        return 0
+    cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+    other = len(text) - cjk
+    return max(0, int(cjk * 0.85 + other / 4))
 
 
 def _api_key() -> str | None:
-    return os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    key = (active_config().get("api_key") or "").strip()
+    return key or None
 
 
 def _base_url() -> str | None:
-    return os.environ.get("LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+    return (active_config().get("base_url") or "").strip() or None
 
 
 def _model() -> str:
-    return (
-        os.environ.get("LLM_MODEL")
-        or os.environ.get("BOOK_COMPILER_MODEL")
-        or os.environ.get("OPENAI_MODEL")
-        or "deepseek-chat"
-    )
+    return (active_config().get("model") or "").strip() or "deepseek-chat"
 
 
 def has_llm() -> bool:
-    return bool(_api_key())
+    return is_configured()
 
 
 def _normalize_base(url: str) -> str:
@@ -46,10 +64,18 @@ def _http_client():
 
         ca = certifi.where()
         if Path(ca).is_file():
-            return httpx.Client(verify=ca, trust_env=False, timeout=120.0)
+            return httpx.Client(
+                verify=ca,
+                trust_env=False,
+                timeout=httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0),
+            )
     except (ImportError, OSError, FileNotFoundError):
         pass
-    return httpx.Client(verify=ssl.create_default_context(), trust_env=False, timeout=120.0)
+    return httpx.Client(
+        verify=ssl.create_default_context(),
+        trust_env=False,
+        timeout=httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0),
+    )
 
 
 def _client():
@@ -63,41 +89,64 @@ def _client():
     return OpenAI(**kwargs)
 
 
+def _completion_kwargs(model: str | None) -> dict:
+    return {
+        "model": model or _model(),
+        "temperature": 0.6,
+        "max_tokens": MAX_OUTPUT_TOKENS,
+    }
+
+
 def complete(system: str, user: str, model: str | None = None) -> str:
-    """Call LLM. No input truncation, no max_tokens cap on output."""
+    """Call LLM with explicit max_tokens."""
     if not has_llm():
         return _heuristic(user)
     resp = _client().chat.completions.create(
-        model=model or _model(),
+        **_completion_kwargs(model),
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        temperature=0.6,
     )
     return resp.choices[0].message.content or ""
 
 
-def complete_stream(system: str, user: str, model: str | None = None):
-    """Yield LLM output text chunks as they arrive."""
+def complete_stream(system: str, user: str, model: str | None = None) -> Iterator[StreamChunk]:
+    """Yield text chunks; final chunk may carry API usage / finish_reason."""
     if not has_llm():
-        yield _heuristic(user)
+        yield StreamChunk(text=_heuristic(user))
         return
+
     stream = _client().chat.completions.create(
-        model=model or _model(),
+        **_completion_kwargs(model),
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        temperature=0.6,
         stream=True,
+        stream_options={"include_usage": True},
     )
+
+    finish_reason: str | None = None
+    completion_tokens: int | None = None
+
     for chunk in stream:
+        usage = getattr(chunk, "usage", None)
+        if usage and usage.completion_tokens is not None:
+            completion_tokens = usage.completion_tokens
+
         if not chunk.choices:
             continue
-        delta = chunk.choices[0].delta.content or ""
+
+        choice = chunk.choices[0]
+        if choice.finish_reason:
+            finish_reason = choice.finish_reason
+        delta = choice.delta.content or ""
         if delta:
-            yield delta
+            yield StreamChunk(text=delta)
+
+    if completion_tokens is not None or finish_reason:
+        yield StreamChunk(completion_tokens=completion_tokens, finish_reason=finish_reason)
 
 
 def _heuristic(prompt: str) -> str:
@@ -106,9 +155,9 @@ def _heuristic(prompt: str) -> str:
         headings = re.findall(r"^(.{4,80})$", src, re.MULTILINE)[:20]
         bullets = "\n".join(f"- {h.strip()}" for h in headings if h.strip())
         return (
-            "（离线模式：请配置 LLM_API_KEY）\n\n## 提取的段落标题\n\n" + bullets + "\n"
+            "（离线模式：请在设置中填写 API Key）\n\n## 提取的段落标题\n\n" + bullets + "\n"
         )
-    return "（离线模式：需 LLM_API_KEY。）\n"
+    return "（离线模式：请在设置 → AI 接口 中配置 API Key。）\n"
 
 
 def load_env_file(path: Path | None = None) -> None:

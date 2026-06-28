@@ -1,4 +1,12 @@
 .env
+_state/llm.json
 __pycache__/
 *.pyc
 .venv/
+.venv-pack/
+library/
+build/
+dist/
+assets/AppIcon.iconset/
+assets/app-icon-1024.png
+*.spec.bak

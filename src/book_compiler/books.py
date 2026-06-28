@@ -1,4 +1,4 @@
-"""Discover book NOTE directories."""
+"""Discover book NOTE directories (user-imported only)."""
 
 from __future__ import annotations
 
@@ -7,19 +7,15 @@ import shutil
 from pathlib import Path
 
 from .paths import (
-    READINGS_PM,
     _registered_books,
     insight_dir,
     meta_path,
-    normalize_slug,
     qa_path,
     resolve_book_root,
     summary_dir,
     synthesis_path,
     unregister_book,
 )
-
-BUILTIN_SLUGS = frozenset({"pm-book-sujie", "inspired-cagan"})
 
 
 def book_stats(root: Path, meta: dict) -> dict:
@@ -46,20 +42,21 @@ def book_stats(root: Path, meta: dict) -> dict:
         "deep_done": bool(pipeline.get("deep_done")),
         "has_qa": qa.is_file() and qa.stat().st_size > 200,
         "has_synthesis": syn.is_file() and syn.stat().st_size > 100,
-        "book_type": meta.get("book_type", "M"),
     }
 
 
 def is_deletable(slug: str) -> bool:
+    from .paths import normalize_slug
+
     slug = normalize_slug(slug)
-    return slug not in BUILTIN_SLUGS and slug in _registered_books()
+    return slug in _registered_books()
 
 
 def delete_book(slug: str) -> dict:
     """Delete an imported book: unregister + remove NOTE directory."""
+    from .paths import normalize_slug
+
     slug = normalize_slug(slug)
-    if slug in BUILTIN_SLUGS:
-        raise ValueError("内置书籍不可删除")
     if slug not in _registered_books():
         raise ValueError("仅支持删除通过 UI 导入的书籍")
     root = resolve_book_root(slug)
@@ -78,6 +75,8 @@ def book_item(root: Path) -> dict:
     slug = meta.get("slug") or root.name.replace("NOTE", "").lower()
     return {
         "slug": slug,
+        "id": slug,
+        "tag": meta.get("tag") or "",
         "title": meta.get("title", slug),
         "path": str(root),
         "chapters": meta.get("chapters", []),
@@ -88,24 +87,17 @@ def book_item(root: Path) -> dict:
 
 
 def discover_books() -> list[dict]:
-    found: dict[str, dict] = {}
-    for note_dir in sorted(READINGS_PM.glob("*NOTE")):
-        mp = note_dir / "insight" / "book-meta.json"
-        if not mp.is_file():
+    """List books registered via import (books.json only)."""
+    items: list[dict] = []
+    for slug, root in _registered_books().items():
+        if not meta_path(root).is_file():
             continue
-        item = book_item(note_dir)
-        found[item["slug"]] = item
-
-    for slug in ("pm-book-sujie", "inspired-cagan"):
         try:
-            root = resolve_book_root(slug)
-            if slug not in found and meta_path(root).is_file():
-                found[slug] = book_item(root)
-        except KeyError:
-            pass
-
+            items.append(book_item(root))
+        except (OSError, json.JSONDecodeError, KeyError):
+            continue
     return sorted(
-        found.values(),
+        items,
         key=lambda b: (
             not b.get("stats", {}).get("deep_done"),
             b.get("title", ""),

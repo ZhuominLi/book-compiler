@@ -1,0 +1,4 @@
+# Desktop app (BeanRead) — install in a venv, not required for ./run-ui.sh
+-r requirements.txt
+pywebview>=5.0
+pyinstaller>=6.0

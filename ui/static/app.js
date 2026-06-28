@@ -395,6 +395,7 @@ const ICONS = {
   layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 10-2.64 6.36"/><path d="M21 3v6h-6"/></svg>',
   filePdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M10 13h4M10 17h4"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
 };
 
 function iconHtml(name) {
@@ -415,6 +416,234 @@ const libraryView = $("#library-view");
 const readerView = $("#reader-view");
 const shelf = $("#shelf");
 const btnImport = $("#btn-import");
+const btnSettings = $("#btn-settings");
+const llmBanner = $("#llm-banner");
+const llmStartupDialog = $("#llm-startup-dialog");
+const llmStartupLater = $("#llm-startup-later");
+const llmStartupSetup = $("#llm-startup-setup");
+const llmSettingsDialog = $("#llm-settings-dialog");
+const llmSettingsForm = $("#llm-settings-form");
+const llmSettingsKey = $("#llm-settings-key");
+const llmSettingsBase = $("#llm-settings-base");
+const llmSettingsModel = $("#llm-settings-model");
+const llmSettingsStatus = $("#llm-settings-status");
+const llmSettingsError = $("#llm-settings-error");
+const llmSettingsCancel = $("#llm-settings-cancel");
+const llmSettingsClearKey = $("#llm-settings-clear-key");
+const updateVersionLine = $("#update-version-line");
+const updateNotes = $("#update-notes");
+const updateError = $("#update-error");
+const btnCheckUpdate = $("#btn-check-update");
+const btnApplyUpdate = $("#btn-apply-update");
+let llmStatus = { configured: false, needs_setup: true };
+let pendingUpdate = null;
+
+function llmNeedsSetup() {
+  if (typeof llmStatus.needs_setup === "boolean") return llmStatus.needs_setup;
+  // 兼容旧版 API：用户已在设置里保存过 Key 则不再提醒
+  return llmStatus.source !== "user";
+}
+
+function updateLlmStatusUI() {
+  const setup = llmNeedsSetup();
+  btnSettings?.classList.toggle("needs-attention", setup);
+  llmBanner?.classList.toggle("hidden", !setup);
+}
+
+async function refreshLlmStatus(options = {}) {
+  try {
+    llmStatus = await api("/api/settings/llm");
+    updateLlmStatusUI();
+    if (options.remind && llmNeedsSetup()) {
+      llmStartupDialog?.showModal();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function openLlmSettingsFromStartup() {
+  llmStartupDialog?.close();
+  openLlmSettingsDialog();
+}
+
+function renderLlmSettingsStatus() {
+  if (!llmSettingsStatus) return;
+  llmSettingsStatus.classList.remove("ok");
+  if (llmNeedsSetup()) {
+    if (llmStatus.configured && llmStatus.source === "env") {
+      llmSettingsStatus.textContent = "当前使用环境变量中的 Key，请保存您自己的 API Key";
+    } else {
+      llmSettingsStatus.textContent = "当前未配置 API Key";
+    }
+    return;
+  }
+  llmSettingsStatus.classList.add("ok");
+  const hint = llmStatus.key_hint ? `（${llmStatus.key_hint}）` : "";
+  const src = llmStatus.source === "user" ? "已保存" : "来自环境变量";
+  llmSettingsStatus.textContent = `已配置 ${src}${hint} · ${llmStatus.model}`;
+}
+
+async function openLlmSettingsDialog() {
+  llmSettingsError?.classList.add("hidden");
+  updateError?.classList.add("hidden");
+  updateNotes?.classList.add("hidden");
+  btnApplyUpdate?.classList.add("hidden");
+  pendingUpdate = null;
+  if (llmSettingsKey) llmSettingsKey.value = "";
+  try {
+    llmStatus = await api("/api/settings/llm");
+    if (llmSettingsBase) llmSettingsBase.value = llmStatus.base_url || "";
+    if (llmSettingsModel) llmSettingsModel.value = llmStatus.model || "";
+    renderLlmSettingsStatus();
+    await refreshUpdateStatus();
+    llmSettingsDialog?.showModal();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function renderUpdateStatus(rt) {
+  if (!updateVersionLine) return;
+  if (!rt?.frozen) {
+    updateVersionLine.textContent = "开发模式：直接使用源码，无需 Runtime 热更新";
+    btnCheckUpdate?.classList.add("hidden");
+    btnApplyUpdate?.classList.add("hidden");
+    return;
+  }
+  btnCheckUpdate?.classList.remove("hidden");
+  const src = rt.source === "runtime" ? "热更新" : "内置";
+  updateVersionLine.textContent = `当前 ${rt.active_version}（${src}）· Shell ${rt.bundled_version}`;
+}
+
+async function refreshUpdateStatus() {
+  try {
+    const rt = await api("/api/update/status");
+    renderUpdateStatus(rt);
+  } catch {
+    if (updateVersionLine) updateVersionLine.textContent = "无法读取版本信息";
+  }
+}
+
+async function checkForUpdate() {
+  updateError?.classList.add("hidden");
+  updateNotes?.classList.add("hidden");
+  btnApplyUpdate?.classList.add("hidden");
+  pendingUpdate = null;
+  if (btnCheckUpdate) {
+    btnCheckUpdate.disabled = true;
+    btnCheckUpdate.textContent = "检查中…";
+  }
+  try {
+    const info = await api("/api/update/check", { method: "POST" });
+    renderUpdateStatus(info);
+    if (!info.ok) {
+      if (updateError) {
+        updateError.textContent = info.error || "检查失败";
+        updateError.classList.remove("hidden");
+      }
+      return;
+    }
+    if (info.update_available) {
+      pendingUpdate = info;
+      if (updateNotes) {
+        updateNotes.textContent = `发现新版本 ${info.latest}：${info.notes || "点击安装后需重启应用"}`;
+        updateNotes.classList.remove("hidden");
+      }
+      btnApplyUpdate?.classList.remove("hidden");
+    } else if (updateVersionLine) {
+      updateVersionLine.textContent = `已是最新 ${info.current}（${info.source === "runtime" ? "热更新" : "内置"}）`;
+    }
+  } catch (e) {
+    if (updateError) {
+      updateError.textContent = e.message;
+      updateError.classList.remove("hidden");
+    }
+  } finally {
+    if (btnCheckUpdate) {
+      btnCheckUpdate.disabled = false;
+      btnCheckUpdate.textContent = "检查更新";
+    }
+  }
+}
+
+async function applyPendingUpdate() {
+  if (!pendingUpdate?.url) return;
+  updateError?.classList.add("hidden");
+  if (btnApplyUpdate) {
+    btnApplyUpdate.disabled = true;
+    btnApplyUpdate.textContent = "下载中…";
+  }
+  try {
+    const res = await api("/api/update/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: pendingUpdate.url, sha256: pendingUpdate.sha256 || "" }),
+    });
+    alert(res.message || "更新已安装，请重启应用");
+    btnApplyUpdate?.classList.add("hidden");
+    pendingUpdate = null;
+    await refreshUpdateStatus();
+  } catch (e) {
+    if (updateError) {
+      updateError.textContent = e.message;
+      updateError.classList.remove("hidden");
+    }
+  } finally {
+    if (btnApplyUpdate) {
+      btnApplyUpdate.disabled = false;
+      btnApplyUpdate.textContent = "下载并安装";
+    }
+  }
+}
+
+async function saveLlmSettings(e) {
+  e?.preventDefault();
+  llmSettingsError?.classList.add("hidden");
+  const payload = {
+    base_url: llmSettingsBase?.value.trim() || "",
+    model: llmSettingsModel?.value.trim() || "",
+  };
+  const key = llmSettingsKey?.value.trim();
+  if (key) payload.api_key = key;
+  try {
+    llmStatus = await api("/api/settings/llm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (llmStatus.source === "user") llmStatus.needs_setup = false;
+    updateLlmStatusUI();
+    llmStartupDialog?.close();
+    llmSettingsDialog?.close();
+  } catch (err) {
+    if (llmSettingsError) {
+      llmSettingsError.textContent = err.message;
+      llmSettingsError.classList.remove("hidden");
+    }
+  }
+}
+
+async function clearLlmKey() {
+  if (!confirm("确定清除已保存的 API Key？")) return;
+  llmSettingsError?.classList.add("hidden");
+  try {
+    llmStatus = await api("/api/settings/llm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: "" }),
+    });
+    if (llmSettingsKey) llmSettingsKey.value = "";
+    renderLlmSettingsStatus();
+    updateLlmStatusUI();
+  } catch (err) {
+    if (llmSettingsError) {
+      llmSettingsError.textContent = err.message;
+      llmSettingsError.classList.remove("hidden");
+    }
+  }
+}
+
 const btnBack = $("#btn-back");
 const btnDeep = $("#btn-deep");
 const btnDeepPrompt = $("#btn-deep-prompt");
@@ -467,8 +696,7 @@ const readerTitle = $("#reader-title");
 const importDialog = $("#import-dialog");
 const importForm = $("#import-form");
 const importTitle = $("#import-title");
-const importSlug = $("#import-slug");
-const importType = $("#import-type");
+const importTag = $("#import-tag");
 const importFile = $("#import-file");
 const importSplit = $("#import-split");
 const importDetect = $("#import-detect");
@@ -482,6 +710,7 @@ const sourceHeader = $("#source-header");
 const sourcePanel = $("#source-body");
 const summaryPanel = $("#summary-body");
 const summaryHeader = $("#summary-header");
+const summaryStreamStats = $("#summary-stream-stats");
 const chatSection = $("#chat-section");
 const toggleSide = $("#toggle-side");
 const toggleNav = $("#toggle-nav");
@@ -512,7 +741,17 @@ function getDeepJob(ch) {
 }
 
 function isChapterDeepGenerating(ch) {
-  return getDeepJob(ch)?.status === "streaming";
+  const s = getDeepJob(ch)?.status;
+  return s === "streaming" || s === "finalizing";
+}
+
+function chapterHasApprovedSummary(chapterId) {
+  const ch = (state.meta?.chapters || []).find((c) => c.id === chapterId);
+  return ch?.status === "approved";
+}
+
+function chapterSummaryFile(chapterId) {
+  return `chapters/${chapterId}.md`;
 }
 
 function releaseDeepJob(ch, job) {
@@ -530,8 +769,13 @@ function syncDeepGeneratingState() {
 function attachDeepStreamView(ch) {
   const job = getDeepJob(ch);
   if (!job) return false;
-  if (job.status === "streaming") {
-    setSummaryStreamingHtml(job.title, job.buffer);
+  if (job.status === "streaming" || job.status === "finalizing") {
+    setSummaryStreamingHtml(job.title, job.buffer, {
+      showCursor: job.status === "streaming",
+      streaming: job.status === "streaming",
+    });
+    applySummaryStatsFromJob(job, job.status === "finalizing" ? "saving" : "streaming");
+    startSummaryStatsTicker(ch, job);
     return true;
   }
   if (job.status === "error") {
@@ -619,6 +863,195 @@ function saveReaderPrefs(patch) {
   applyReaderPrefs();
 }
 
+const SUMMARY_STATS_KEY = "beanread-summary-stats";
+let summaryStatsTicker = null;
+
+function estimateTokensClient(text) {
+  if (!text) return 0;
+  let cjk = 0;
+  for (const c of text) {
+    if (c >= "\u4e00" && c <= "\u9fff") cjk += 1;
+  }
+  return Math.max(0, Math.round(cjk * 0.85 + (text.length - cjk) / 4));
+}
+
+function summaryStatsStorageKey(slug, ch) {
+  return `${slug || state.slug}:${ch}`;
+}
+
+function loadPersistedSummaryStats(slug, ch) {
+  if (!slug || !ch) return null;
+  try {
+    const all = JSON.parse(localStorage.getItem(SUMMARY_STATS_KEY) || "{}");
+    return all[summaryStatsStorageKey(slug, ch)] || null;
+  } catch {
+    return null;
+  }
+}
+
+function persistSummaryStats(slug, ch, stats) {
+  if (!slug || !ch || !stats) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(SUMMARY_STATS_KEY) || "{}");
+    all[summaryStatsStorageKey(slug, ch)] = { ...stats, at: Date.now() };
+    localStorage.setItem(SUMMARY_STATS_KEY, JSON.stringify(all));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function streamElapsedSec(job, endMs = Date.now()) {
+  const start = job.startedAt || job.firstTokenAt;
+  if (!start) return 0;
+  return Math.max(0, (endMs - start) / 1000);
+}
+
+function computeStreamTps(job, endMs = Date.now()) {
+  const tokens = Number(job.streamTokens) || estimateTokensClient(job.buffer) || 0;
+  if (!tokens) return 0;
+  const elapsed = streamElapsedSec(job, endMs);
+  if (elapsed < 0.05) return 0;
+  return Math.round((tokens / elapsed) * 10) / 10;
+}
+
+function lockStreamStats(job, serverTps) {
+  job.streamEndedAt = Date.now();
+  job.streamTokens = job.streamTokens ?? estimateTokensClient(job.buffer);
+  const local = computeStreamTps(job, job.streamEndedAt);
+  const remote = Number(serverTps);
+  job.streamTps =
+    local > 0 ? local
+    : Number.isFinite(remote) && remote > 0 ? remote
+    : job.streamTps || 0;
+}
+
+function formatSummaryStatsLabel({ tokens, tps, exact = false, truncated = false, phase = "" } = {}) {
+  const prefix = exact ? "" : "≈";
+  const tok = Number(tokens) || 0;
+  const rate = Number(tps) || 0;
+  let label = `${prefix}${tok.toLocaleString()} tok · ${rate.toFixed(1)} t/s`;
+  if (truncated) label += " · 已达 8192 上限";
+  else if (phase === "saving") label += " · 保存中…";
+  else if (phase === "streaming") label += " · 生成中…";
+  else if (phase === "done") label += " · 完成";
+  return label;
+}
+
+function setSummaryStreamStats(tokens, tps, opts = {}) {
+  if (!summaryStreamStats) return;
+  const label = formatSummaryStatsLabel({ tokens, tps, ...opts });
+  const show = tokens != null || tps != null || opts.phase;
+  const truncated = !!opts.truncated;
+
+  if (!show) {
+    summaryStreamStats.classList.add("hidden");
+    summaryStreamStats.textContent = "";
+    return;
+  }
+  summaryStreamStats.textContent = label;
+  summaryStreamStats.classList.remove("hidden");
+  summaryStreamStats.classList.toggle("summary-stream-stats-truncated", truncated);
+  summaryStreamStats.classList.toggle("is-finalizing", opts.phase === "saving");
+}
+
+function clearSummaryStreamStats() {
+  setSummaryStreamStats(null, null);
+}
+
+function stopSummaryStatsTicker() {
+  if (summaryStatsTicker) {
+    clearInterval(summaryStatsTicker);
+    summaryStatsTicker = null;
+  }
+}
+
+function startSummaryStatsTicker(ch, job) {
+  stopSummaryStatsTicker();
+  summaryStatsTicker = setInterval(() => {
+    if (getDeepJob(ch) !== job) {
+      stopSummaryStatsTicker();
+      return;
+    }
+    if (job.status === "done" || job.status === "error") {
+      stopSummaryStatsTicker();
+      return;
+    }
+    const tokens = job.streamTokens ?? estimateTokensClient(job.buffer);
+    job.streamTps = computeStreamTps(job);
+    const sinceStart = Date.now() - (job.startedAt || Date.now());
+    const idleMs = job.lastDeltaAt ? Date.now() - job.lastDeltaAt : sinceStart;
+    if (job.status === "streaming" && idleMs > 120000) {
+      job.status = "error";
+      job.error = "生成超时（长时间无响应）";
+      job.abort?.abort();
+      stopSummaryStatsTicker();
+      if (state.currentChapter === ch) {
+        setSummaryMessage(`<p class="loading">生成超时：${escapeHtml(job.error)}</p>`);
+        summaryPanel.innerHTML += `<div class="content-toolbar">${inlineIconBtn("deep-retry", "refresh", "重试")}</div>`;
+        $("#deep-retry")?.addEventListener("click", () => runDeepSummary(job.force));
+      }
+      releaseDeepJob(ch, job);
+      return;
+    }
+    if (job.status === "streaming" && job.buffer && idleMs > 1500) {
+      job.status = "finalizing";
+      lockStreamStats(job);
+      if (state.currentChapter === ch) {
+        setSummaryStreamingHtml(job.title, job.buffer, { showCursor: false, streaming: false });
+        setSummaryStreamStats(job.streamTokens, job.streamTps, {
+          exact: job.streamExact,
+          truncated: job.streamTruncated,
+          phase: "saving",
+        });
+      }
+      syncDeepGeneratingState();
+      return;
+    }
+    const phase = job.status === "finalizing" ? "saving" : "streaming";
+    setSummaryStreamStats(job.streamTokens, job.streamTps, {
+      exact: job.streamExact,
+      truncated: job.streamTruncated,
+      phase,
+    });
+  }, 350);
+}
+
+function removeSummaryStreamCursors() {
+  summaryPanel?.classList.remove("summary-streaming");
+  summaryPanel?.querySelectorAll(".stream-cursor").forEach((el) => el.remove());
+}
+
+function applySummaryStatsFromJob(job, phase = "done") {
+  if (!job || job.streamTokens == null) return;
+  lockStreamStats(job);
+  setSummaryStreamStats(job.streamTokens, job.streamTps, {
+    exact: job.streamExact,
+    truncated: job.streamTruncated,
+    phase,
+  });
+  if (state.slug && state.currentChapter) {
+    persistSummaryStats(state.slug, state.currentChapter, {
+      tokens: job.streamTokens,
+      tps: job.streamTps,
+      exact: job.streamExact,
+      truncated: job.streamTruncated,
+    });
+  }
+}
+
+function restorePersistedSummaryStats(slug, ch) {
+  const saved = loadPersistedSummaryStats(slug, ch);
+  if (!saved) {
+    clearSummaryStreamStats();
+    return;
+  }
+  setSummaryStreamStats(saved.tokens, saved.tps, {
+    exact: saved.exact,
+    truncated: saved.truncated,
+    phase: "done",
+  });
+}
+
 function setSummaryHtml(html) {
   summaryPanel.className = "side-body summary-body article md-body reader";
   summaryPanel.innerHTML = html;
@@ -630,22 +1063,46 @@ function isSummaryNearBottom(el, threshold = 96) {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
 }
 
-function setSummaryStreamingHtml(title, bodyMd) {
+function setSummaryStreamingHtml(title, bodyMd, { showCursor = true, streaming = true } = {}) {
   const el = summaryPanel;
   const prevTop = el.scrollTop;
   const stickToBottom = isSummaryNearBottom(el);
 
-  el.className = "side-body summary-body article md-body reader summary-streaming";
+  el.className = streaming
+    ? "side-body summary-body article md-body reader summary-streaming"
+    : "side-body summary-body article md-body reader";
   const header = title ? `<h1>${escapeHtml(title)} · 深度 Summary</h1>` : "";
   const body = bodyMd
     ? renderMd(bodyMd)
-    : `<p class="summary-stream-placeholder">正在生成…<span class="stream-cursor">▍</span></p>`;
-  el.innerHTML = header + body + (bodyMd ? `<span class="stream-cursor stream-cursor-inline">▍</span>` : "");
+    : `<p class="summary-stream-placeholder">正在生成…${showCursor ? '<span class="stream-cursor">▍</span>' : ""}</p>`;
+  el.innerHTML = header + body + (bodyMd && showCursor ? `<span class="stream-cursor stream-cursor-inline">▍</span>` : "");
 
   if (stickToBottom) el.scrollTop = el.scrollHeight;
   else el.scrollTop = prevTop;
 }
 
+function drainSseFrames(sseBuf, onEvent) {
+  let buf = sseBuf;
+  let idx;
+  while ((idx = buf.indexOf("\n\n")) >= 0) {
+    const frame = buf.slice(0, idx);
+    buf = buf.slice(idx + 2);
+    const evt = parseSseFrame(frame);
+    if (evt) onEvent(evt);
+  }
+  return buf;
+}
+
+function finalizeDeepStreamUi(ch, job, { phase = "done" } = {}) {
+  if (state.currentChapter !== ch) return;
+  removeSummaryStreamCursors();
+  if (!job.buffer?.trim()) return;
+  const fullMd = `# ${job.title} · 深度 Summary\n\n${job.buffer}`;
+  setSummaryHtml(renderMd(fullMd));
+  linkifyAnchors(summaryPanel, ch);
+  state.summaryExists = true;
+  applySummaryStatsFromJob(job, phase);
+}
 function parseSseFrame(block) {
   let event = "message";
   const dataLines = [];
@@ -669,24 +1126,116 @@ async function consumeDeepSummaryStream(ch, force) {
     buffer: "",
     force,
     abort: ac,
+    streamTokens: 0,
+    streamTps: 0,
+    streamExact: false,
+    streamTruncated: false,
+    startedAt: Date.now(),
+    firstTokenAt: null,
+    lastDeltaAt: null,
+    streamEndedAt: null,
   };
   deepJobs.set(ch, job);
   syncDeepGeneratingState();
 
   if (state.currentChapter === ch) {
     setSummaryStreamingHtml(job.title, "");
+    setSummaryStreamStats(0, 0, { phase: "streaming" });
+    startSummaryStatsTicker(ch, job);
   }
 
   let renderTimer = null;
+  let doneReceived = false;
+
+  const clearRenderTimer = () => {
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = null;
+    }
+  };
 
   const scheduleRender = () => {
     if (renderTimer) return;
     renderTimer = setTimeout(() => {
       renderTimer = null;
-      if (state.currentChapter === ch && job.status === "streaming") {
-        setSummaryStreamingHtml(job.title, job.buffer);
-      }
+      if (state.currentChapter !== ch || job.status !== "streaming") return;
+      setSummaryStreamingHtml(job.title, job.buffer, { showCursor: true, streaming: true });
     }, 220);
+  };
+
+  const handleSseEvent = (evt) => {
+    if (evt.event === "meta" && evt.data.title) {
+      job.title = evt.data.title;
+      return;
+    }
+    if (evt.event === "delta") {
+      job.buffer += evt.data.text || "";
+      job.lastDeltaAt = Date.now();
+      if (job.firstTokenAt == null) job.firstTokenAt = Date.now();
+      if (evt.data.tokens != null) {
+        job.streamTokens = evt.data.tokens;
+        job.streamExact = !!evt.data.tokens_exact;
+      } else {
+        job.streamTokens = estimateTokensClient(job.buffer);
+      }
+      job.streamTps = computeStreamTps(job);
+      scheduleRender();
+      if (state.currentChapter === ch) {
+        setSummaryStreamStats(job.streamTokens, job.streamTps, {
+          exact: job.streamExact,
+          truncated: job.streamTruncated,
+          phase: "streaming",
+        });
+      }
+      return;
+    }
+    if (evt.event === "stream_end") {
+      job.status = "finalizing";
+      if (evt.data.tokens != null) {
+        job.streamTokens = evt.data.tokens;
+        job.streamExact = !!evt.data.tokens_exact;
+        job.streamTruncated = !!evt.data.truncated;
+      }
+      lockStreamStats(job, evt.data.tps);
+      clearRenderTimer();
+      if (state.currentChapter === ch) {
+        setSummaryStreamingHtml(job.title, job.buffer, { showCursor: false, streaming: false });
+        setSummaryStreamStats(job.streamTokens, job.streamTps, {
+          exact: job.streamExact,
+          truncated: job.streamTruncated,
+          phase: "saving",
+        });
+      }
+      syncDeepGeneratingState();
+      return;
+    }
+    if (evt.event === "error") {
+      throw new Error(evt.data.error || "生成失败");
+    }
+    if (evt.event === "done") {
+      doneReceived = true;
+      job.status = "done";
+      if (evt.data.tokens != null) {
+        job.streamTokens = evt.data.tokens;
+        job.streamExact = !!evt.data.tokens_exact;
+        job.streamTruncated = !!evt.data.truncated;
+      }
+      lockStreamStats(job, evt.data.tps);
+      stopSummaryStatsTicker();
+      clearRenderTimer();
+      if (state.currentChapter === ch) {
+        if (job.buffer.trim()) {
+          finalizeDeepStreamUi(ch, job, { phase: "done" });
+        } else {
+          void reloadChapterSummaryFromDisk(ch).catch((err) => {
+            if (state.currentChapter === ch) {
+              setSummaryMessage(`<p class="loading">Summary 保存后加载失败：${escapeHtml(err.message)}</p>`);
+            }
+          });
+        }
+      }
+      syncDeepGeneratingState();
+    }
   };
 
   try {
@@ -713,68 +1262,46 @@ async function consumeDeepSummaryStream(ch, force) {
 
     while (true) {
       const { done, value } = await reader.read();
+      if (value) sseBuf += dec.decode(value, { stream: true });
+      sseBuf = drainSseFrames(sseBuf, handleSseEvent);
       if (done) break;
-      sseBuf += dec.decode(value, { stream: true });
-
-      let idx;
-      while ((idx = sseBuf.indexOf("\n\n")) >= 0) {
-        const frame = sseBuf.slice(0, idx);
-        sseBuf = sseBuf.slice(idx + 2);
-        const evt = parseSseFrame(frame);
-        if (!evt) continue;
-
-        if (evt.event === "meta" && evt.data.title) {
-          job.title = evt.data.title;
-        } else if (evt.event === "delta") {
-          job.buffer += evt.data.text || "";
-          scheduleRender();
-        } else if (evt.event === "error") {
-          throw new Error(evt.data.error || "生成失败");
-        } else if (evt.event === "done") {
-          job.status = "done";
-          if (renderTimer) {
-            clearTimeout(renderTimer);
-            renderTimer = null;
-          }
-          syncDeepGeneratingState();
-        }
-      }
     }
+    sseBuf += dec.decode();
+    drainSseFrames(sseBuf, handleSseEvent);
 
-    job.status = "done";
-    releaseDeepJob(ch, job);
-    state.meta = await api(`/api/books/${encodeURIComponent(state.slug)}/meta`);
+    stopSummaryStatsTicker();
+    clearRenderTimer();
 
-    if (state.currentChapter === ch) {
-      summaryPanel.classList.remove("summary-streaming");
-      summaryPanel.querySelectorAll(".stream-cursor").forEach((el) => el.remove());
-      const fullMd = `# ${job.title} · 深度 Summary\n\n${job.buffer}`;
-      setSummaryHtml(renderMd(fullMd));
-      linkifyAnchors(summaryPanel, ch);
-      state.summaryExists = true;
-      summaryPanel.scrollTop = 0;
+    if (doneReceived) {
+      releaseDeepJob(ch, job);
+      try {
+        state.meta = await api(`/api/books/${encodeURIComponent(state.slug)}/meta`);
+      } catch { /* meta refresh is best-effort */ }
+      if (state.currentChapter === ch) summaryPanel.scrollTop = 0;
       syncDeepGeneratingState();
+      return;
     }
+
+    throw new Error("生成未完成（连接中断）");
   } catch (err) {
     if (err.name === "AbortError") {
+      stopSummaryStatsTicker();
       releaseDeepJob(ch, job);
       return;
     }
+    stopSummaryStatsTicker();
     job.status = "error";
     job.error = err.message;
+    removeSummaryStreamCursors();
     if (state.currentChapter === ch) {
       setSummaryMessage(`<p class="loading">生成失败：${escapeHtml(err.message)}</p>`);
       summaryPanel.innerHTML += `<div class="content-toolbar">${inlineIconBtn("deep-retry", "refresh", "重试")}</div>`;
       $("#deep-retry")?.addEventListener("click", () => runDeepSummary(force));
     }
+    releaseDeepJob(ch, job);
     syncDeepGeneratingState();
   } finally {
-    if (renderTimer) clearTimeout(renderTimer);
-    if (getDeepJob(ch) === job && job.status === "streaming") {
-      releaseDeepJob(ch, job);
-    } else {
-      syncDeepGeneratingState();
-    }
+    clearRenderTimer();
   }
 }
 
@@ -1439,7 +1966,7 @@ function syncChatPlaceholder() {
     chatInput.placeholder = "基于全书概览提问…";
   } else if (state.currentChapter) {
     chatInput.placeholder = state.usePageIndex
-      ? "本章原文 + 跨章 PageIndex 检索…"
+      ? "本章原文 + 跨章检索…"
       : "基于当前章节提问…";
   } else {
     chatInput.placeholder = "提问…";
@@ -1466,7 +1993,7 @@ function syncChatCrossButton() {
   btnChatCross.classList.toggle("hidden", !show);
   btnChatCross.classList.toggle("active", !!state.usePageIndex);
   const label = state.usePageIndex
-    ? "跨章检索：已开启（附加 PageIndex）"
+    ? "跨章检索：已开启"
     : "跨章检索：关闭（仅本章原文）";
   btnChatCross.title = label;
   btnChatCross.setAttribute("aria-label", label);
@@ -1544,6 +2071,7 @@ $("#btn-theme")?.addEventListener("click", () => {
 });
 
 function initToolbarIcons() {
+  setBtnIcon(btnSettings, "settings");
   setBtnIcon(btnImport, "plus");
   setBtnIcon(btnBack, "arrowLeft");
   if (btnPreviewInline) setBtnIcon(btnPreviewInline, "overview");
@@ -2252,7 +2780,7 @@ async function runDeepSummary(force = false) {
   if (!ch) return;
 
   const existing = getDeepJob(ch);
-  if (existing?.status === "streaming") {
+  if (existing?.status === "streaming" || existing?.status === "finalizing") {
     if (!force) {
       attachDeepStreamView(ch);
       syncDeepGeneratingState();
@@ -2291,21 +2819,15 @@ initDraggableDialog(deepPromptDialog, $("#deep-prompt-drag-handle"));
 initResizableDialog(deepPromptDialog, $("#deep-prompt-resize"));
 
 function renderRetrievalPanel(retrieval) {
-  if (!retrieval?.context?.trim()) return null;
+  if (!retrieval) return null;
   const nodes = retrieval.nodes || [];
-  const label = nodes.length
-    ? `PageIndex 检索 · ${nodes.length} 个节点（${nodes.join("、")}）`
-    : "PageIndex 检索";
+  if (!nodes.length) return null;
+  const label = `检索 · ${nodes.length} 个节点（${nodes.join("、")}）`;
   const details = document.createElement("details");
   details.className = "chat-retrieval";
   const summary = document.createElement("summary");
   summary.textContent = label;
   details.appendChild(summary);
-  const body = document.createElement("div");
-  body.className = "chat-retrieval-body md-body";
-  body.innerHTML = renderMd(retrieval.context);
-  linkifyAnchors(body, state.currentChapter);
-  details.appendChild(body);
   return details;
 }
 
@@ -2514,6 +3036,7 @@ async function loadShelf() {
   try {
     const books = await api("/api/books");
     if (!books.length) {
+      shelf.className = "shelf shelf--flat";
       shelf.innerHTML = `
         <div class="shelf-empty">
           <p>书架是空的</p>
@@ -2524,7 +3047,9 @@ async function loadShelf() {
       emptyImport?.addEventListener("click", openImportDialog);
       return;
     }
-    shelf.innerHTML = books.map((b) => renderBookCard(b)).join("");
+    const anyTagged = books.some((b) => (b.tag || "").trim());
+    shelf.className = anyTagged ? "shelf" : "shelf shelf--flat";
+    shelf.innerHTML = anyTagged ? renderShelfCollections(books) : books.map((b) => renderBookCard(b)).join("");
     shelf.querySelectorAll(".book-card[data-slug]").forEach((card) => {
       card.addEventListener("click", (e) => {
         if (e.target.closest("button")) return;
@@ -2573,6 +3098,31 @@ async function loadShelf() {
   }
 }
 
+function renderShelfCollections(books) {
+  const groups = new Map();
+  for (const b of books) {
+    const key = (b.tag || "").trim() || "未分类";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(b);
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (a === "未分类") return 1;
+    if (b === "未分类") return -1;
+    return a.localeCompare(b, "zh");
+  });
+  return keys
+    .map(
+      (key) => `
+    <section class="shelf-collection">
+      <h3 class="shelf-collection-title">${escapeHtml(key)}</h3>
+      <div class="shelf-collection-grid">
+        ${groups.get(key).map((b) => renderBookCard(b)).join("")}
+      </div>
+    </section>`
+    )
+    .join("");
+}
+
 function renderBookCard(b) {
   const s = b.stats || {};
   const badges = [];
@@ -2593,16 +3143,17 @@ function renderBookCard(b) {
     ? `<button type="button" class="btn-icon btn-icon-sm btn-icon-danger" data-action="delete" title="删除" aria-label="删除">${iconHtml("trash")}</button>`
     : "";
 
+  const metaLine = (b.tag || "").trim()
+    ? `<span class="book-card-tag">${escapeHtml(b.tag)}</span>`
+    : `<span class="book-card-id">ID · ${escapeHtml(b.id || b.slug)}</span>`;
+
   return `
     <article class="book-card" data-slug="${escapeHtml(b.slug)}">
       <div class="book-card-header">
         <div class="book-card-title">${escapeHtml(b.title)}</div>
         <div class="book-card-tools">${deleteBtn}</div>
       </div>
-      <div class="book-card-meta">
-        <span>${escapeHtml(b.slug)}</span>
-        <span>${s.book_type || "M"} 型</span>
-      </div>
+      <div class="book-card-meta">${metaLine}</div>
       <div class="book-card-badges">${badges.join("")}</div>
       ${splitBtn ? `<div class="book-card-actions">${splitBtn}</div>` : ""}
     </article>`;
@@ -2705,6 +3256,15 @@ importSplit?.addEventListener("change", () => {
 });
 
 btnImport?.addEventListener("click", openImportDialog);
+btnSettings?.addEventListener("click", openLlmSettingsDialog);
+$("#llm-banner-settings")?.addEventListener("click", openLlmSettingsDialog);
+llmStartupLater?.addEventListener("click", () => llmStartupDialog?.close());
+llmStartupSetup?.addEventListener("click", openLlmSettingsFromStartup);
+llmSettingsCancel?.addEventListener("click", () => llmSettingsDialog?.close());
+llmSettingsClearKey?.addEventListener("click", clearLlmKey);
+llmSettingsForm?.addEventListener("submit", saveLlmSettings);
+btnCheckUpdate?.addEventListener("click", checkForUpdate);
+btnApplyUpdate?.addEventListener("click", applyPendingUpdate);
 importCancel?.addEventListener("click", () => importDialog.close());
 
 importForm?.addEventListener("submit", async (e) => {
@@ -2722,10 +3282,9 @@ importForm?.addEventListener("submit", async (e) => {
     const fd = new FormData();
     fd.append("title", title);
     fd.append("file", file);
-    fd.append("book_type", importType.value);
     fd.append("auto_split", importSplit.checked ? "true" : "false");
-    const slug = importSlug.value.trim();
-    if (slug) fd.append("slug", slug);
+    const tag = importTag.value.trim();
+    if (tag) fd.append("tag", tag);
     const data = await api("/api/books", { method: "POST", body: fd });
     importDialog.close();
     await loadShelf();
@@ -2806,6 +3365,10 @@ function setActiveNav(file) {
   });
 }
 
+async function reloadChapterSummaryFromDisk(chapterId) {
+  return tryLoadChapterSummary(chapterId, chapterSummaryFile(chapterId));
+}
+
 async function tryLoadChapterSummary(chapterId, file) {
   const { content: md } = await api(
     `/api/books/${encodeURIComponent(state.slug)}/insight/${encodeURIComponent(file)}`
@@ -2815,8 +3378,11 @@ async function tryLoadChapterSummary(chapterId, file) {
   linkifyAnchors(summaryPanel, chapterId);
   if (chapterId) {
     state.summaryExists = true;
-    deepJobs.delete(chapterId);
+    if (!isChapterDeepGenerating(chapterId)) {
+      deepJobs.delete(chapterId);
+    }
     syncDeepGeneratingState();
+    restorePersistedSummaryStats(state.slug, chapterId);
   }
   return true;
 }
@@ -2839,15 +3405,9 @@ async function showInsight(file, chapterId = null, opts = {}) {
   }
 
   if (chapterId && isChapterDeepGenerating(chapterId)) {
-    try {
-      await tryLoadChapterSummary(chapterId, file);
-      if (focus) summaryPanel.scrollTop = 0;
-      return;
-    } catch {
-      attachDeepStreamView(chapterId);
-      syncDeepGeneratingState();
-      return;
-    }
+    attachDeepStreamView(chapterId);
+    syncDeepGeneratingState();
+    return;
   }
 
   setSummaryMessage('<p class="loading">加载中…</p>');
@@ -2860,8 +3420,14 @@ async function showInsight(file, chapterId = null, opts = {}) {
       if (isChapterDeepGenerating(chapterId)) {
         attachDeepStreamView(chapterId);
         syncDeepGeneratingState();
+      } else if (chapterHasApprovedSummary(chapterId)) {
+        setSummaryMessage(
+          `<div class="content-toolbar">${inlineIconBtn("deep-inline", "sparkles", "重新生成 Summary")}</div>` +
+          `<p class="loading">Summary 加载失败。<br>${escapeHtml(e.message)}</p>`
+        );
+        $("#deep-inline")?.addEventListener("click", () => runDeepSummary(true));
       } else {
-        runDeepSummary(false);
+        void runDeepSummary(false);
       }
       return;
     }
@@ -2998,6 +3564,7 @@ applyLayout();
 loadChatsFromStorage();
 initResizers();
 syncReaderLayout();
+refreshLlmStatus({ remind: true });
 document.getElementById("reader-view")?.addEventListener("click", handleAnchorActivate);
 document.getElementById("reader-view")?.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;

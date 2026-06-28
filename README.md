@@ -6,14 +6,14 @@
 
 ---
 
-## 下载安装（v0.1.0）
+## 下载安装（v0.1.1）
 
 | 平台 | 安装包 | 说明 |
 |------|--------|------|
-| **macOS** | [BeanRead-0.1.0-macOS.dmg](https://github.com/ZhuominLi/book-compiler/releases/download/v0.1.0/BeanRead-0.1.0-macOS.dmg) | 打开 DMG，拖入「应用程序」 |
-| **Windows** | [BeanRead-0.1.0-Windows.zip](https://github.com/ZhuominLi/book-compiler/releases/download/v0.1.0/BeanRead-0.1.0-Windows.zip) | 解压后运行 `BeanRead\BeanRead.exe` |
+| **macOS** | [BeanRead-0.1.1-macOS.dmg](https://github.com/ZhuominLi/book-compiler/releases/download/v0.1.1/BeanRead-0.1.1-macOS.dmg) | 打开 DMG，拖入「应用程序」 |
+| **Windows** | [BeanRead-0.1.1-Windows.zip](https://github.com/ZhuominLi/book-compiler/releases/download/v0.1.1/BeanRead-0.1.1-Windows.zip) | 解压后运行 `BeanRead\BeanRead.exe` |
 
-[查看全部 Release →](https://github.com/ZhuominLi/book-compiler/releases/tag/v0.1.0)
+[查看全部 Release →](https://github.com/ZhuominLi/book-compiler/releases/tag/v0.1.1)
 
 ### 首次打开
 

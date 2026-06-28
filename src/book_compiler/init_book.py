@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .paths import READINGS_PM, meta_path, register_book, summary_dir, insight_dir, state_dir
+from .paths import library_dir, meta_path, register_book, summary_dir, insight_dir, state_dir
 
 
 def _now() -> str:
@@ -23,6 +23,7 @@ def init_book(
     *,
     title: str,
     slug: str | None = None,
+    tag: str | None = None,
     source_txt: Path | None = None,
     source_text: str | None = None,
     source_filename: str | None = None,
@@ -35,7 +36,8 @@ def init_book(
 ) -> Path:
     """Create {title}NOTE/ with summary/ + insight/ skeleton."""
     slug = slug or _slugify(title)
-    root = note_dir or (READINGS_PM / f"{title}NOTE")
+    tag = (tag or "").strip() or None
+    root = note_dir or (library_dir() / f"{title}NOTE")
     root.mkdir(parents=True, exist_ok=True)
     (root / "_extract").mkdir(exist_ok=True)
     summary_dir(root)
@@ -89,6 +91,7 @@ def init_book(
         "schema_version": "0.1",
         "title": title,
         "slug": slug,
+        "tag": tag,
         "source_file": rel_source,
         "ingest": ingest,
         "language": "zh",
