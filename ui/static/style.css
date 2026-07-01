@@ -1125,7 +1125,7 @@ nav a.active {
 
 .summary-header-bar .summary-header-actions {
   flex-shrink: 0;
-  margin-left: 0;
+  margin-left: auto;
 }
 
 .summary-header-bar #btn-deep,
