@@ -1,5 +1,9 @@
 .env
 _state/llm.json
+
+# 本地规划文档，不上传 GitHub
+SPEC.md
+开发目标.md
 __pycache__/
 *.pyc
 .venv/
