@@ -105,13 +105,11 @@ LLM 配置：项目根目录 `.env`（见 `.env.example`），或在 UI **设置
 | `src/book_compiler/` | 拆书、Summary、PageIndex、LLM 管线 |
 | `ui/static/` | 阅读器前端 |
 | `launcher.py` | 桌面版入口（PyWebView + 本地服务） |
-| `SPEC.md` | 数据格式与管线规范 |
 
 ---
 
 ## 许可证与说明
 
 - 本项目为个人阅读工具，API 调用费用由使用者自行承担
-- 规范与数据层设计详见 [SPEC.md](SPEC.md)
 
 **懒一点，读进去。**
