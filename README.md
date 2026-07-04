@@ -1,8 +1,20 @@
-# 懒豆阅读 · BeanRead
+<p align="center">
+  <img src="docs/banner.png" alt="懒豆阅读 BeanRead — 让阅读成为一件轻松的事" width="100%">
+</p>
 
-**Sink in. Read on.** — 本地 AI 阅读助手：导入一本书，分章精读，生成深度 Summary，边读边问。
+<p align="center">
+  <strong>Sink in. Read on.</strong><br>
+  本地 AI 阅读助手 · 导入一本书，分章精读，生成深度 Summary，边读边问
+</p>
 
-> 把 PDF / EPUB / TXT 变成可对话的知识库。数据留在本机，API Key 由你自己配置。
+<p align="center">
+  <a href="https://github.com/ZhuominLi/book-compiler/releases/tag/v0.1.2"><img src="https://img.shields.io/badge/release-v0.1.2-8B7355?style=for-the-badge" alt="v0.1.2"></a>
+  <a href="https://github.com/ZhuominLi/book-compiler/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-C8A882?style=for-the-badge" alt="macOS | Windows"></a>
+</p>
+
+<p align="center">
+  把 PDF / EPUB / TXT 变成可对话的知识库 · 数据留在本机，API Key 由你自己配置
+</p>
 
 ---
 
